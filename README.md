@@ -22,6 +22,10 @@ Claude Code is excellent at deep, focused work in a single repo. The moment you 
 
 **Anthology is the manager for those sessions.** Every session is a real PTY with persistent scrollback, surfaced in a sidebar, and pinged to macOS when it needs your attention. Run as many in parallel as your machine handles.
 
+<p align="center">
+  <img src="docs/screenshots/01-mission-control-empty.png" alt="Anthology — Mission Control" width="900">
+</p>
+
 ## Download
 
 <p>
@@ -69,6 +73,10 @@ The app is signed with an Apple Developer ID and notarized by Apple, so Gatekeep
 
 Hit **⌘N** to spawn a session. Pick a working directory — that's where `claude` runs and what files the agent can see. Optionally name it, color it, or tag it.
 
+<p align="center">
+  <img src="docs/screenshots/02-spawn-dialog.png" alt="Spawn new session dialog" width="900">
+</p>
+
 Each session is a real `node-pty` pseudo-terminal. The xterm.js renderer is WebGL-accelerated. Scrollback persists to disk per-session, so an app restart or a session crash never loses context. Sessions you've ended stay in the sidebar with a **Restart** banner.
 
 ### Mission Control
@@ -108,6 +116,10 @@ Anthology runs a small local MCP HTTP server that the PM session connects to. Th
 | `⌘1`–`⌘9` | Jump to session 1–9 (works while typing in the terminal) |
 | `1`–`9` | Jump to session 1–9 (when not typing) |
 | `Esc` | Close any modal |
+
+<p align="center">
+  <img src="docs/screenshots/03-command-palette.png" alt="Command palette (⌘K)" width="900">
+</p>
 
 ## Architecture
 
