@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Lomuscio Labs mark, inverted">
+  <g>
+    <rect x="14" y="10" width="22" height="82" fill="#F8F8F8"></rect>
+    <rect x="14" y="80" width="62" height="22" fill="#F8F8F8"></rect>
+  </g>
+  <g>
+    <rect x="50" y="28" width="22" height="82" fill="#A96BDB"></rect>
+    <rect x="50" y="98" width="62" height="22" fill="#A96BDB"></rect>
+  </g>
+  <rect x="50" y="80" width="22" height="22" fill="#D9B9F0"></rect>
+  <rect x="50" y="98" width="26" height="4" fill="#D9B9F0"></rect>
+</svg>

@@ -1,0 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Urbanist:wght@400;500;600;700;800&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --ll-black:        #0A0A0B;
+  --ll-white:        #F8F8F8;
+  --ll-purple:       #7B2FBE;
+  --ll-deep-black:   #050506;
+  --ll-mid-gray:     #6B6B73;
+  --ll-light-gray:   #B8B8BF;
+  --ll-pale-gray:    #E2E2E6;
+  --ll-off-white:    #EDEDEE;
+  --ll-purple-dark:  #5A1F8E;
+  --ll-purple-light: #A96BDB;
+  --ll-purple-ghost: #F3EEFA;
+  --ll-chart-purple: #7B2FBE;
+  --ll-chart-teal:   #1DB9A0;
+  --ll-chart-coral:  #E8634F;
+  --ll-chart-gold:   #D4A843;
+  --ll-chart-slate:  #5A6B7E;
+  --ll-chart-sky:    #4DA3D4;
+  --ll-chart-blush:  #D4648A;
+  --ll-chart-lime:   #7CBB4F;
+
+  --shadow-sm:  0 1px 2px rgba(10,10,11,0.04);
+  --shadow-md:  0 4px 16px rgba(10,10,11,0.06);
+  --shadow-lg:  0 12px 40px rgba(10,10,11,0.08);
+  --shadow-focus: 0 0 0 3px rgba(123,47,190,0.25);
+
+  --font-display: 'Bebas Neue', 'Oswald', 'Impact', sans-serif;
+  --font-heading: 'Urbanist', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-body:    'Figtree', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:    'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+  --ease-out:  cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast:  120ms;
+  --dur-med:   200ms;
+}
+
+[data-theme="light"] {
+  --app-bg:         var(--ll-white);
+  --app-surface:    #FFFFFF;
+  --app-surface-2:  var(--ll-off-white);
+  --app-surface-3:  var(--ll-pale-gray);
+  --app-sidebar-bg: #FCFCFD;
+  --app-fg-1:       var(--ll-black);
+  --app-fg-2:       var(--ll-mid-gray);
+  --app-fg-3:       var(--ll-light-gray);
+  --app-border:     var(--ll-pale-gray);
+  --app-border-2:   var(--ll-light-gray);
+  --app-accent:     var(--ll-purple);
+  --app-accent-soft: var(--ll-purple-ghost);
+
+  --status-running: var(--ll-purple);
+  --status-waiting: #D4A843;
+  --status-idle:    var(--ll-light-gray);
+  --status-error:   #E8634F;
+  --status-done:    #1DB9A0;
+}
+
+[data-theme="dark"] {
+  --app-bg:         #0A0A0B;
+  --app-surface:    #121214;
+  --app-surface-2:  #1A1A1D;
+  --app-surface-3:  #232327;
+  --app-sidebar-bg: #0D0D0F;
+  --app-fg-1:       #F8F8F8;
+  --app-fg-2:       #9999A1;
+  --app-fg-3:       #5A5A62;
+  --app-border:     #232327;
+  --app-border-2:   #2D2D32;
+  --app-accent:     #A96BDB;
+  --app-accent-soft: rgba(169, 107, 219, 0.12);
+
+  --status-running: #A96BDB;
+  --status-waiting: #D4A843;
+  --status-idle:    #5A5A62;
+  --status-error:   #E8634F;
+  --status-done:    #1DB9A0;
+}

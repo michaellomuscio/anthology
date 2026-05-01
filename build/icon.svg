@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="squircle">
+      <path d="M 232 0 H 792 C 921.6 0 1024 102.4 1024 232 V 792 C 1024 921.6 921.6 1024 792 1024 H 232 C 102.4 1024 0 921.6 0 792 V 232 C 0 102.4 102.4 0 232 0 Z"/>
+    </clipPath>
+
+    <clipPath id="body-clip">
+      <ellipse cx="512" cy="570" rx="160" ry="220"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <!-- Pure black background -->
+    <rect width="1024" height="1024" fill="#0A0A0B"/>
+
+    <!-- All bee strokes in one purple, no fills -->
+    <g stroke="#A96BDB" stroke-width="22" fill="none" stroke-linecap="round" stroke-linejoin="round">
+
+      <!-- Wings: two simple ovals fanning out, each tilted outward -->
+      <ellipse cx="320" cy="430" rx="170" ry="110" transform="rotate(-22 320 430)"/>
+      <ellipse cx="704" cy="430" rx="170" ry="110" transform="rotate( 22 704 430)"/>
+
+      <!-- Body outline -->
+      <ellipse cx="512" cy="570" rx="160" ry="220"/>
+
+      <!-- Three stripe lines inside the body, clipped so they end at the outline -->
+      <g clip-path="url(#body-clip)">
+        <line x1="320" y1="486" x2="704" y2="486"/>
+        <line x1="320" y1="570" x2="704" y2="570"/>
+        <line x1="320" y1="654" x2="704" y2="654"/>
+      </g>
+
+      <!-- Head: circle on top -->
+      <circle cx="512" cy="320" r="78"/>
+
+      <!-- Antennae -->
+      <path d="M 470 264 Q 430 200 408 168"/>
+      <path d="M 554 264 Q 594 200 616 168"/>
+
+      <!-- Stinger: short V at the bottom -->
+      <path d="M 480 800 L 512 856 L 544 800"/>
+    </g>
+
+    <!-- Tiny solid dots at the antenna tips and a center body dot — same purple,
+         small enough to read as terminals on the line work, not as fills. -->
+    <g fill="#A96BDB" stroke="none">
+      <circle cx="404" cy="164" r="14"/>
+      <circle cx="620" cy="164" r="14"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Lomuscio Labs mark">
+  
+  
+  <g>
+    <rect x="14" y="10" width="22" height="82" fill="#0A0A0B"></rect>
+    <rect x="14" y="80" width="62" height="22" fill="#0A0A0B"></rect>
+  </g>
+  
+  <g>
+    <rect x="50" y="28" width="22" height="82" fill="#7B2FBE" style="mix-blend-mode:multiply"></rect>
+    <rect x="50" y="98" width="62" height="22" fill="#7B2FBE" style="mix-blend-mode:multiply"></rect>
+  </g>
+  
+  <rect x="50" y="80" width="22" height="22" fill="#3A0F5A"></rect>
+  <rect x="50" y="98" width="26" height="4" fill="#3A0F5A"></rect>
+</svg>

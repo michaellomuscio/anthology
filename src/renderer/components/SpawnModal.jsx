@@ -1,0 +1,153 @@
+import React, { useEffect, useState } from 'react';
+import { SESSION_COLORS, TAGS } from '../constants.js';
+
+const station = window.station;
+
+export default function SpawnModal({ onClose, onSpawn }) {
+  const [name, setName] = useState('');
+  const [cwd, setCwd] = useState('');
+  const [color, setColor] = useState(SESSION_COLORS[0]);
+  const [tag, setTag] = useState(TAGS[0]);
+  const [recents, setRecents] = useState([]);
+  const [pmMode, setPmMode] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const home = await station.getHome();
+      setCwd(home);
+      const list = await station.listRecentDirs();
+      setRecents(list || []);
+    })();
+  }, []);
+
+  const onPick = async () => {
+    const dir = await station.pickDirectory();
+    if (dir) setCwd(dir);
+  };
+
+  const submit = (e) => {
+    e?.preventDefault?.();
+    onSpawn({
+      name: name.trim() || (pmMode ? 'project manager' : cwdLeaf(cwd)) || 'session',
+      cwd: cwd || '~',
+      color,
+      tag,
+      pm: pmMode,
+    });
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <div className="modal-header">
+          <h2>Spawn new session</h2>
+          <p>Starts a Claude Code session in the chosen directory.</p>
+        </div>
+        <div className="modal-body">
+          <div
+            className={`pm-toggle ${pmMode ? 'on' : ''}`}
+            onClick={() => setPmMode((v) => !v)}
+            role="button"
+            tabIndex={0}
+          >
+            <div className="pm-toggle-switch">
+              <div className="pm-toggle-knob" />
+            </div>
+            <div className="pm-toggle-text">
+              <div className="pm-toggle-title">Project Manager mode</div>
+              <div className="pm-toggle-sub">
+                Gives this session MCP tools to spawn, message, monitor, and kill other sessions.
+                Use it to coordinate complex multi-session work.
+              </div>
+            </div>
+          </div>
+
+          <div className="field">
+            <div className="field-label">Name</div>
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={pmMode ? 'e.g. ship-the-redesign PM' : 'e.g. fix login flow'}
+            />
+          </div>
+
+          <div className="field">
+            <div className="field-label">Working directory</div>
+            <div className="field-row">
+              <input
+                value={cwd}
+                onChange={(e) => setCwd(e.target.value)}
+                placeholder="~/code/your-repo"
+              />
+              <button type="button" className="btn btn-ghost" onClick={onPick}>Choose…</button>
+            </div>
+            {recents.length > 0 && (
+              <div className="recent-dirs">
+                <div className="recent-dirs-label">Recent</div>
+                <div className="recent-dirs-chips">
+                  {recents.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      className={`recent-chip ${d === cwd ? 'active' : ''}`}
+                      onClick={() => setCwd(d)}
+                      title={d}
+                    >
+                      {leaf(d)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div className="field">
+              <div className="field-label">Tag</div>
+              <select value={tag} onChange={(e) => setTag(e.target.value)}>
+                {TAGS.map((t) => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <div className="field-label">Color</div>
+              <div className="color-picker">
+                {SESSION_COLORS.map((c) => (
+                  <div
+                    key={c}
+                    className={`color-swatch ${c === color ? 'selected' : ''}`}
+                    style={{ background: c }}
+                    onClick={() => setColor(c)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <span className="hint">
+            {pmMode
+              ? 'Spawns claude with --mcp-config · station_* tools available'
+              : 'Spawns a real PTY · runs `claude` in the chosen directory'}
+          </span>
+          <div className="actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary">
+              {pmMode ? 'Spawn PM' : 'Spawn'}<span className="kbd">⏎</span>
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function cwdLeaf(cwd) {
+  if (!cwd) return '';
+  const parts = cwd.split('/').filter(Boolean);
+  return parts[parts.length - 1] || '';
+}
+
+function leaf(p) {
+  return cwdLeaf(p) || p;
+}

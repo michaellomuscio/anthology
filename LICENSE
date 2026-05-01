@@ -1,0 +1,48 @@
+Anthology — Proprietary License
+
+Copyright (c) 2026 Michael Lomuscio (Lomuscio Labs). All rights reserved.
+
+This software and its source code (the "Software") are made available to
+invited collaborators of the private GitHub repository at
+https://github.com/michaellomuscio/anthology (the "Repository") for the
+limited purposes set out below. Access to the Repository does not transfer
+ownership of, or any rights in, the Software beyond what is granted here.
+
+1. Permitted use.
+   Invited collaborators may install and run the Software on Apple Silicon
+   macOS devices they personally control, for personal evaluation, internal
+   business use, and review.
+
+2. Restrictions.
+   Unless the copyright holder grants prior written permission, you may NOT:
+     a. redistribute, sublicense, sell, lease, or otherwise transfer the
+        Software or any portion of it to any third party;
+     b. publish the Software, its source code, or any derivative work in
+        any public location;
+     c. remove or alter any copyright, trademark, or attribution notice;
+     d. use the Software or its source code to train, fine-tune, or
+        evaluate machine-learning models.
+
+3. Modifications and contributions.
+   Modifications made by collaborators for their own use are permitted.
+   Any modification submitted back to the Repository (e.g. via pull
+   request) is licensed to the copyright holder under the same terms as
+   the rest of the Software, with the right to incorporate it into future
+   releases.
+
+4. No warranty.
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+   IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+   CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+   TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
+   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+5. Termination.
+   This license terminates automatically if you breach any of its terms.
+   On termination you must cease use of the Software and destroy all
+   copies in your possession.
+
+For licensing inquiries beyond what is granted here, contact the
+copyright holder.
