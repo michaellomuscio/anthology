@@ -31,7 +31,7 @@ Claude Code is excellent at deep, focused work in a single repo. The moment you 
     <img src="docs/screenshots/demo.gif" alt="Anthology in motion: jump between live sessions, command palette filtering, spawn flow" width="900">
   </a>
   <br>
-  <sub><em>↑ 22-second demo · <a href="docs/screenshots/demo.mp4">download MP4</a> for full quality</em></sub>
+  <sub><em>↑ 21-second demo · <a href="docs/screenshots/demo.mp4">download MP4</a> for full quality</em></sub>
 </p>
 
 ## Download
