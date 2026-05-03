@@ -23,7 +23,15 @@ Claude Code is excellent at deep, focused work in a single repo. The moment you 
 **Anthology is the manager for those sessions.** Every session is a real PTY with persistent scrollback, surfaced in a sidebar, and pinged to macOS when it needs your attention. Run as many in parallel as your machine handles.
 
 <p align="center">
-  <img src="docs/screenshots/mission-control.png" alt="Anthology — Mission Control with three live sessions" width="900">
+  <img src="docs/screenshots/mission-control.png" alt="Anthology — Mission Control with four live sessions, three of them actively working" width="900">
+</p>
+
+<p align="center">
+  <a href="docs/screenshots/demo.mp4">
+    <img src="docs/screenshots/demo.gif" alt="Anthology in motion: jump between live sessions, command palette filtering, spawn flow" width="900">
+  </a>
+  <br>
+  <sub><em>↑ 22-second demo · <a href="docs/screenshots/demo.mp4">download MP4</a> for full quality</em></sub>
 </p>
 
 ## Download
