@@ -1451,3 +1451,264 @@ button { font-family: inherit; cursor: pointer; }
   padding: 0 4px;
   margin: 0 2px;
 }
+
+/* ============== Phone pairing modal ============== */
+
+.topbar-icon-btn { position: relative; }
+.topbar-icon-btn .topbar-icon-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-running, #2ea44f);
+  box-shadow: 0 0 0 2px var(--app-surface);
+}
+.topbar-icon-btn.has-clients { color: var(--app-accent); }
+
+.phone-pair-active {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 22px;
+  align-items: start;
+}
+.phone-pair-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.phone-pair-qr img {
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+  border: 1px solid var(--app-border);
+}
+.phone-pair-countdown {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--app-fg-2);
+  letter-spacing: 0.08em;
+}
+.phone-pair-countdown strong {
+  color: var(--app-fg-1);
+  font-weight: 600;
+}
+
+.phone-pair-details {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.phone-pair-code-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.phone-pair-code {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--app-accent);
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  text-align: center;
+  user-select: all;
+}
+
+.phone-pair-conn {
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.phone-pair-conn-host {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.phone-pair-conn-host code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--app-fg-1);
+}
+.phone-pair-conn-hint {
+  font-size: 11px;
+  color: var(--app-fg-2);
+  margin-top: 6px;
+}
+
+.phone-pair-kind {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border);
+}
+.phone-pair-kind--tailscale { color: #A96BDB; border-color: rgba(169,107,219,0.4); }
+.phone-pair-kind--lan { color: #6BAFA9; border-color: rgba(107,175,169,0.4); }
+.phone-pair-kind--public { color: #DB6B6B; border-color: rgba(219,107,107,0.4); }
+
+.phone-pair-other {
+  font-size: 12px;
+}
+.phone-pair-other summary {
+  cursor: pointer;
+  color: var(--app-fg-2);
+  margin-bottom: 6px;
+}
+.phone-pair-other ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.phone-pair-other li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.phone-pair-iface {
+  color: var(--app-fg-2);
+  font-size: 10px;
+}
+
+.phone-pair-instructions {
+  font-size: 12px;
+  color: var(--app-fg-2);
+  line-height: 1.5;
+  padding: 8px 0;
+  border-top: 1px dashed var(--app-border);
+}
+
+.phone-pair-idle {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.phone-pair-blurb {
+  margin: 0;
+  font-size: 12px;
+  color: var(--app-fg-2);
+  line-height: 1.6;
+}
+.phone-pair-network-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.phone-pair-network-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 6px 10px;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+}
+.phone-pair-warn {
+  font-size: 12px;
+  padding: 8px 12px;
+  background: rgba(219,107,107,0.08);
+  border: 1px solid rgba(219,107,107,0.3);
+  border-radius: 6px;
+  color: var(--app-fg-1);
+}
+
+.phone-pair-devices { padding-top: 6px; border-top: 1px solid var(--app-border); }
+.phone-pair-empty {
+  font-size: 12px;
+  color: var(--app-fg-2);
+  font-style: italic;
+}
+.phone-pair-token-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.phone-pair-token-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+}
+.phone-pair-token-label { font-size: 13px; font-weight: 600; }
+.phone-pair-token-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--app-fg-2);
+  margin-top: 2px;
+}
+.phone-pair-revoke {
+  font-size: 11px;
+  padding: 4px 10px;
+  background: transparent;
+  color: #DB6B6B;
+  border: 1px solid rgba(219,107,107,0.35);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.phone-pair-revoke:hover {
+  background: rgba(219,107,107,0.1);
+}
+
+.phone-pair-push {
+  padding: 12px 0;
+  border-top: 1px solid var(--app-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.phone-pair-push-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.phone-pair-push-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--app-fg-2);
+}
+.phone-pair-push-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.phone-pair-push-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.phone-pair-push-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 6px;
+  background: rgba(169,107,219,0.18);
+  color: #A96BDB;
+}

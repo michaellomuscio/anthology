@@ -8,6 +8,7 @@ import CommandPalette from './components/CommandPalette.jsx';
 import Schedules from './components/Schedules.jsx';
 import OnboardingTour from './components/OnboardingTour.jsx';
 import HelpGuide from './components/HelpGuide.jsx';
+import PhonePairing from './components/PhonePairing.jsx';
 import { disposeTerminal } from './components/Terminal.jsx';
 
 const ONBOARDED_KEY = 'anthology-onboarded-v1';
@@ -29,6 +30,8 @@ export default function App() {
   const [showSpawn, setShowSpawn] = useState(false);
   const [showCmdK, setShowCmdK] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showPhone, setShowPhone] = useState(false);
+  const [phoneClientCount, setPhoneClientCount] = useState(0);
   const [showTour, setShowTour] = useState(() => {
     try { return !localStorage.getItem(ONBOARDED_KEY); } catch (_) { return false; }
   });
@@ -194,6 +197,20 @@ export default function App() {
     station.setBadgeCount(waitingCount + (unreadTotal > 0 ? 1 : 0));
   }, [statuses, unread]);
 
+  // Bridge connected-clients count (for the topbar phone icon)
+  useEffect(() => {
+    if (!station.bridgeInfo || !station.onBridgeClients) return;
+    let off = null;
+    (async () => {
+      try {
+        const info = await station.bridgeInfo();
+        if (info && typeof info.clientCount === 'number') setPhoneClientCount(info.clientCount);
+      } catch (_) {}
+    })();
+    off = station.onBridgeClients(({ count }) => setPhoneClientCount(count));
+    return () => { try { off && off(); } catch (_) {} };
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e) => {
@@ -330,6 +347,8 @@ export default function App() {
           statuses={statuses}
           openCmdK={() => setShowCmdK(true)}
           openHelp={() => setShowHelp(true)}
+          openPhone={() => setShowPhone(true)}
+          phoneClientCount={phoneClientCount}
         />
 
         {view === 'session' && active ? (
@@ -375,6 +394,10 @@ export default function App() {
           onClose={() => setShowHelp(false)}
           onReplayTour={() => setShowTour(true)}
         />
+      )}
+
+      {showPhone && (
+        <PhonePairing onClose={() => setShowPhone(false)} />
       )}
 
       {showTour && <OnboardingTour onClose={closeTour} />}

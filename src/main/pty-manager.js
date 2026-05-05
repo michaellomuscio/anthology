@@ -225,9 +225,20 @@ class PtyManager {
   kill(id) {
     const entry = this.sessions.get(id);
     if (!entry) return false;
-    try {
-      entry.proc.kill();
-    } catch (_) {}
+    // SIGTERM first so claude has a chance to flush its own scrollback /
+    // disconnect cleanly. SIGKILL after 1 s if it's still alive — defends
+    // against any subprocess that ignores SIGTERM. Without this fallback,
+    // a hung claude could keep the PTY open even after the user requested
+    // a kill, which is what surfaced as "kill button does nothing" on iOS.
+    try { entry.proc.kill('SIGTERM'); } catch (_) {}
+    const pid = entry.proc.pid;
+    setTimeout(() => {
+      // If the proc is still in our map (onExit hasn't cleared it), force-kill.
+      if (this.sessions.has(id)) {
+        try { entry.proc.kill('SIGKILL'); } catch (_) {}
+        try { if (pid) process.kill(pid, 'SIGKILL'); } catch (_) {}
+      }
+    }, 1000);
     this.sessions.delete(id);
     return true;
   }

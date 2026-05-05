@@ -1,11 +1,16 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, shell, dialog, Notification, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, Notification, Menu, powerSaveBlocker } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 const PtyManager = require('./pty-manager');
 const SessionsStore = require('./sessions-store');
 const BufferStore = require('./buffer-store');
+const BridgeServer = require('./bridge-server');
+const BridgeTokens = require('./bridge-tokens');
+const BridgeConfig = require('./bridge-config');
+const PushDispatcher = require('./push-dispatcher');
 
 // Reject ids that could escape userData via path traversal or null bytes.
 // Mirror BufferStore.pathFor's character set so all on-disk artifacts share
@@ -29,6 +34,30 @@ const McpHttpServer = require('./mcp-server');
 const { buildTools } = require('./mcp-tools');
 const Scheduler = require('./scheduler');
 
+// Best-effort guess at the network addresses a phone could connect to. Tailscale
+// hands out 100.64.0.0/10; common LAN ranges are RFC1918. We surface these to
+// the pairing UI so the QR code embeds the right host.
+function listConnectivityAddresses() {
+  const out = [];
+  const ifaces = os.networkInterfaces();
+  for (const [name, addrs] of Object.entries(ifaces || {})) {
+    for (const a of addrs || []) {
+      if (a.family !== 'IPv4' || a.internal) continue;
+      const ip = a.address;
+      let kind = 'lan';
+      if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip)) kind = 'tailscale';
+      else if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)) kind = 'lan';
+      else if (/^169\.254\./.test(ip)) continue; // link-local
+      else kind = 'public';
+      out.push({ iface: name, ip, kind });
+    }
+  }
+  // Stable sort: tailscale first (best for "anywhere" UX), then LAN.
+  const order = { tailscale: 0, lan: 1, public: 2 };
+  out.sort((a, b) => order[a.kind] - order[b.kind]);
+  return out;
+}
+
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const VITE_URL = 'http://localhost:5174';
 
@@ -48,6 +77,12 @@ let bufferStore = null;
 let mcpServer = null;
 let mcpInfo = null; // { port, token }
 let scheduler = null;
+let bridgeServer = null;
+let bridgeTokens = null;
+let bridgeConfig = null;
+let pushDispatcher = null;
+let bridgeInfo = null; // { port }
+let powerSaveBlockerId = null;
 
 // Standard macOS application menu, but with the leftmost label forced to
 // APP_NAME so dev runs don't show "Electron" next to the apple. Same template
@@ -171,10 +206,47 @@ app.whenReady().then(async () => {
 
   sessionsStore = new SessionsStore(app.getPath('userData'));
   bufferStore = new BufferStore(app.getPath('userData'));
+  bridgeTokens = new BridgeTokens(app.getPath('userData'));
+  bridgeConfig = new BridgeConfig(app.getPath('userData'));
 
-  const sendToRenderer = (channel, payload) => {
+  const sendToRendererOnly = (channel, payload) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(channel, payload);
+    }
+  };
+
+  // Fan-out: every channel the renderer hears, the bridge also gets a translated
+  // version. Keeps the bridge in sync with renderer-driven session lifecycle and
+  // PTY events without rewiring PtyManager / Scheduler.
+  const sendToRenderer = (channel, payload) => {
+    sendToRendererOnly(channel, payload);
+    if (!bridgeServer) return;
+    try {
+      switch (channel) {
+        case 'pty:data':
+          bridgeServer.handlePtyData(payload.id, payload.data);
+          break;
+        case 'pty:status':
+          bridgeServer.handlePtyStatus(payload.id, payload.status);
+          if (pushDispatcher) pushDispatcher.noteStatus(payload.id, payload.status);
+          break;
+        case 'pty:exit':
+          bridgeServer.handlePtyExit(payload.id, payload.exitCode, payload.signal);
+          break;
+        case 'session:created':
+          bridgeServer.handleSessionCreated(payload);
+          break;
+        case 'session:killed':
+          bridgeServer.handleSessionKilled(payload && payload.id);
+          break;
+        case 'schedule:fired':
+          bridgeServer.handleScheduleFired(payload);
+          break;
+        default:
+          break;
+      }
+    } catch (e) {
+      console.warn('[bridge] fan-out failed:', e);
     }
   };
 
@@ -193,6 +265,54 @@ app.whenReady().then(async () => {
     console.log(`[mcp] listening on 127.0.0.1:${mcpInfo.port}`);
   } catch (e) {
     console.error('[mcp] failed to start:', e);
+  }
+
+  // -------------------- Bridge server (phone companion) --------------------
+  // Listens on all interfaces so Tailscale / LAN clients can reach it. Each WS
+  // upgrade requires a Bearer token issued via the in-app pairing flow. While
+  // any client is connected we hold a powerSaveBlocker so the Mac doesn't sleep
+  // mid-session — invisible to the user and matches the iOS app's expectation
+  // that the Mac is reachable any time the user opens the phone app.
+  bridgeServer = new BridgeServer({
+    ptyManager,
+    sessionsStore,
+    bufferStore,
+    scheduler: null, // assigned right after Scheduler is constructed below
+    tokens: bridgeTokens,
+    appVersion: app.getVersion(),
+    serverName: os.hostname().replace(/\.local$/, ''),
+    auditPath: path.join(app.getPath('userData'), 'bridge-audit.log'),
+    onClientChange: (count) => {
+      sendToRendererOnly('bridge:clients', { count });
+      if (count > 0 && powerSaveBlockerId === null) {
+        try {
+          powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+          console.log('[bridge] powerSaveBlocker engaged');
+        } catch (e) {
+          console.warn('[bridge] powerSaveBlocker failed:', e);
+        }
+      } else if (count === 0 && powerSaveBlockerId !== null) {
+        try { powerSaveBlocker.stop(powerSaveBlockerId); } catch (_) {}
+        powerSaveBlockerId = null;
+        console.log('[bridge] powerSaveBlocker released');
+      }
+    },
+  });
+  try {
+    bridgeInfo = await bridgeServer.start();
+    console.log(`[bridge] listening on 0.0.0.0:${bridgeInfo.port}`);
+  } catch (e) {
+    console.error('[bridge] failed to start:', e);
+  }
+
+  pushDispatcher = new PushDispatcher({
+    tokens: bridgeTokens,
+    config: bridgeConfig,
+    bridgeServer,
+    sessionsStore,
+  });
+  if (bridgeConfig.isPushConfigured()) {
+    console.log('[push] configured: forwarding waiting/error transitions to', bridgeConfig.data.workerUrl);
   }
 
   // Scheduler: when a schedule fires, spawn a session in its cwd and submit the prompt.
@@ -228,6 +348,9 @@ app.whenReady().then(async () => {
       } catch (_) {}
     },
   });
+  // Late-bind the scheduler reference now that it exists; bridge methods
+  // touch this only when iOS clients invoke schedule operations.
+  if (bridgeServer) bridgeServer.scheduler = scheduler;
 
   registerIpcHandlers();
   createWindow();
@@ -249,7 +372,12 @@ app.on('before-quit', (e) => {
   const teardown = () => {
     if (ptyManager) ptyManager.killAll();
     if (mcpServer) mcpServer.stop().catch(() => {});
+    if (bridgeServer) bridgeServer.stop().catch(() => {});
     if (scheduler) scheduler.shutdown();
+    if (powerSaveBlockerId !== null) {
+      try { powerSaveBlocker.stop(powerSaveBlockerId); } catch (_) {}
+      powerSaveBlockerId = null;
+    }
   };
   if (didFlush || !mainWindow || mainWindow.isDestroyed()) {
     teardown();
@@ -277,9 +405,64 @@ app.on('before-quit', (e) => {
 function registerIpcHandlers() {
   // -------------------- Sessions persistence --------------------
   ipcMain.handle('sessions:list', () => sessionsStore.list());
-  ipcMain.handle('sessions:save', (_e, session) => sessionsStore.upsert(session));
-  ipcMain.handle('sessions:delete', (_e, id) => sessionsStore.remove(id));
+  ipcMain.handle('sessions:save', (_e, session) => {
+    const out = sessionsStore.upsert(session);
+    if (bridgeServer) bridgeServer.handleSessionMeta(out || session);
+    return out;
+  });
+  ipcMain.handle('sessions:delete', (_e, id) => {
+    const out = sessionsStore.remove(id);
+    if (bridgeServer) bridgeServer.handleSessionKilled(id);
+    return out;
+  });
   ipcMain.handle('sessions:recentDirs', () => sessionsStore.listRecentDirs());
+
+  // -------------------- Bridge (phone companion) --------------------
+  ipcMain.handle('bridge:info', () => {
+    if (!bridgeServer || !bridgeInfo) return { running: false };
+    return {
+      running: true,
+      port: bridgeInfo.port,
+      protocol: BridgeServer.PROTOCOL_VERSION,
+      addresses: listConnectivityAddresses(),
+      clientCount: bridgeServer.clientCount(),
+      pendingPairing: bridgeTokens.pendingPairing(),
+    };
+  });
+  ipcMain.handle('bridge:network-info', () => listConnectivityAddresses());
+  ipcMain.handle('bridge:pair-start', () => {
+    if (!bridgeServer || !bridgeInfo) throw new Error('bridge_not_running');
+    const { code, expiresAt } = bridgeTokens.startPairing();
+    const addrs = listConnectivityAddresses();
+    const preferred = addrs[0] || null;
+    const host = preferred ? preferred.ip : '127.0.0.1';
+    const url = `anthology://pair?host=${encodeURIComponent(host)}&port=${bridgeInfo.port}&code=${code}`;
+    return {
+      code,
+      expiresAt,
+      port: bridgeInfo.port,
+      preferredHost: host,
+      preferredKind: preferred ? preferred.kind : 'loopback',
+      url,
+      addresses: addrs,
+    };
+  });
+  ipcMain.handle('bridge:pair-cancel', () => {
+    bridgeTokens.cancelPairing();
+    return true;
+  });
+  ipcMain.handle('bridge:tokens-list', () => bridgeTokens.list());
+  ipcMain.handle('bridge:token-revoke', (_e, tokenId) => {
+    const ok = bridgeTokens.revoke(tokenId);
+    if (ok && bridgeServer) bridgeServer.disconnectByTokenId(tokenId);
+    return ok;
+  });
+  ipcMain.handle('bridge:push-config', () => bridgeConfig ? bridgeConfig.publicView() : { pushConfigured: false });
+  ipcMain.handle('bridge:push-config-set', (_e, payload) => {
+    if (!bridgeConfig) return false;
+    bridgeConfig.set(payload || {});
+    return bridgeConfig.publicView();
+  });
 
   // -------------------- PTY management --------------------
   // Public pty:create deliberately drops `command` — only the privileged

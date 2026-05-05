@@ -79,4 +79,19 @@ contextBridge.exposeInMainWorld('station', {
     ipcRenderer.on('schedule:fired', listener);
     return () => ipcRenderer.removeListener('schedule:fired', listener);
   },
+
+  // Bridge (phone companion)
+  bridgeInfo: () => ipcRenderer.invoke('bridge:info'),
+  bridgeNetworkInfo: () => ipcRenderer.invoke('bridge:network-info'),
+  bridgePairStart: () => ipcRenderer.invoke('bridge:pair-start'),
+  bridgePairCancel: () => ipcRenderer.invoke('bridge:pair-cancel'),
+  bridgeTokensList: () => ipcRenderer.invoke('bridge:tokens-list'),
+  bridgeTokenRevoke: (tokenId) => ipcRenderer.invoke('bridge:token-revoke', tokenId),
+  bridgePushConfig: () => ipcRenderer.invoke('bridge:push-config'),
+  bridgePushConfigSet: (payload) => ipcRenderer.invoke('bridge:push-config-set', payload),
+  onBridgeClients: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    ipcRenderer.on('bridge:clients', listener);
+    return () => ipcRenderer.removeListener('bridge:clients', listener);
+  },
 });
