@@ -295,6 +295,6 @@ Questions, bugs, or feature requests: open an issue.
 
 ## License
 
-Copyright © 2026 Michael Lomuscio. All rights reserved.
+Licensed under the [Apache License, Version 2.0](LICENSE).
 
-Distributed privately to invited collaborators only. See [LICENSE](LICENSE) for terms.
+Copyright © 2026 Michael Lomuscio · Lomuscio Labs. See [NOTICE](NOTICE) for attribution requirements.
