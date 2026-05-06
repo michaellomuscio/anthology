@@ -5,33 +5,27 @@
     </clipPath>
   </defs>
 
-  <g stroke="currentColor" stroke-width="36" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Wings -->
+  <g stroke="#A96BDB" stroke-width="36" fill="none" stroke-linecap="round" stroke-linejoin="round">
     <ellipse cx="320" cy="430" rx="170" ry="110" transform="rotate(-22 320 430)"/>
     <ellipse cx="704" cy="430" rx="170" ry="110" transform="rotate( 22 704 430)"/>
 
-    <!-- Body outline -->
     <ellipse cx="512" cy="570" rx="160" ry="220"/>
 
-    <!-- Stripes inside the body -->
     <g clip-path="url(#body-clip)">
       <line x1="320" y1="486" x2="704" y2="486"/>
       <line x1="320" y1="570" x2="704" y2="570"/>
       <line x1="320" y1="654" x2="704" y2="654"/>
     </g>
 
-    <!-- Head -->
     <circle cx="512" cy="320" r="78"/>
 
-    <!-- Antennae -->
     <path d="M 470 264 Q 430 200 408 168"/>
     <path d="M 554 264 Q 594 200 616 168"/>
 
-    <!-- Stinger -->
     <path d="M 480 800 L 512 856 L 544 800"/>
   </g>
 
-  <g fill="currentColor" stroke="none">
+  <g fill="#A96BDB" stroke="none">
     <circle cx="404" cy="164" r="22"/>
     <circle cx="620" cy="164" r="22"/>
   </g>
