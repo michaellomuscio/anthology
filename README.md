@@ -11,9 +11,10 @@
 <p align="center">
   <img src="https://img.shields.io/badge/platform-macOS%2014%2B-1d1d1f?logo=apple&logoColor=white" alt="macOS 14+">
   <img src="https://img.shields.io/badge/arch-Apple%20Silicon-A96BDB" alt="Apple Silicon">
-  <img src="https://img.shields.io/badge/version-0.2.0-2ea44f" alt="v0.2.0">
+  <img src="https://img.shields.io/badge/version-0.3.0-2ea44f" alt="v0.3.0">
   <img src="https://img.shields.io/badge/signed-Developer%20ID-blue?logo=apple&logoColor=white" alt="Signed">
   <img src="https://img.shields.io/badge/notarized-yes-success" alt="Notarized">
+  <img src="https://img.shields.io/badge/iOS%20companion-yes-A96BDB?logo=apple&logoColor=white" alt="iOS companion app">
 </p>
 
 ---
@@ -37,14 +38,30 @@ Claude Code is excellent at deep, focused work in a single repo. The moment you 
 ## Download
 
 <p>
-  <a href="https://github.com/michaellomuscio/anthology/releases/download/v0.2.0/Anthology-0.2.0-arm64.dmg">
-    <strong>⬇ Download Anthology 0.2.0 for Apple Silicon</strong>
+  <a href="https://github.com/michaellomuscio/anthology/releases/download/v0.3.0/Anthology-0.3.0-arm64.dmg">
+    <strong>⬇ Download Anthology 0.3.0 for Apple Silicon</strong>
   </a>
   &nbsp;·&nbsp;
   <a href="https://github.com/michaellomuscio/anthology/releases/latest">All releases</a>
 </p>
 
 > This repository is private. You need to be signed in to GitHub with collaborator access to download.
+
+## Companion projects
+
+This repo is one of three that together make up the Anthology system:
+
+| Repo | What it is |
+|---|---|
+| **anthology** *(this one)* | The Mac app. Spawns and manages Claude Code sessions; hosts the WebSocket bridge for the iOS companion. |
+| **[anthology-ios](https://github.com/michaellomuscio/anthology-ios)** | The iPhone / iPad companion app. Pairs with this Mac app over WebSocket, lets you view and control sessions remotely, and receives push notifications when a session needs attention. |
+| **[anthology-push-worker](https://github.com/michaellomuscio/anthology-push-worker)** | A ~150-line Cloudflare Worker (free tier) that signs APNs JWTs and forwards push alerts from this Mac to the iOS app. Stateless. Deploy once with `wrangler deploy`. |
+
+If you only want the Mac app and aren't using the iPhone companion, ignore the other two. Setup walkthroughs:
+
+- iOS app pairing & install — see [`anthology-ios/README.md`](https://github.com/michaellomuscio/anthology-ios#readme)
+- Push notification setup (Apple key, Worker, secrets) — see [`docs/SETUP_PUSH.md`](docs/SETUP_PUSH.md)
+- Bridge protocol reference — see [`docs/bridge-protocol.md`](docs/bridge-protocol.md)
 
 ## Requirements
 
@@ -120,6 +137,12 @@ In the spawn dialog, toggle **Project Manager mode** to give a session MCP tools
 
 Anthology runs a small local MCP HTTP server that the PM session connects to. The server is bound to localhost with a per-session token; nothing is exposed to the network.
 
+### Phone companion (new in 0.3)
+
+A WebSocket bridge inside Anthology lets the [iOS companion app](https://github.com/michaellomuscio/anthology-ios) view and control sessions from your phone — over LAN, [Tailscale](https://tailscale.com), or anywhere with internet. Pairing is QR-based and one-shot; tokens are stored as `sha256` hashes on the Mac and revocable from the phone icon in the top bar.
+
+Optional: configure a free [Cloudflare Worker](https://github.com/michaellomuscio/anthology-push-worker) so the phone wakes up with a banner when a session goes `waiting` or `error` while the iOS app is closed. Setup walkthrough at [`docs/SETUP_PUSH.md`](docs/SETUP_PUSH.md).
+
 ### Keyboard shortcuts
 
 | Shortcut | Action |
@@ -179,6 +202,7 @@ A few design choices worth calling out:
 - **xterm.js 6** with WebGL, Unicode 11, image, web-links, search, and serialize addons
 - **node-pty** — real pseudo-terminals for each `claude` session
 - **node-cron** — schedules
+- **`ws`** — WebSocket server hosting the iOS companion bridge
 - **electron-builder** — signed, notarized, hardened-runtime DMG builds
 
 ## Privacy & security
@@ -218,16 +242,23 @@ anthology/
 │   │   ├── sessions-store.js   # session list metadata
 │   │   ├── scheduler.js        # cron-style schedules
 │   │   ├── mcp-server.js       # local MCP HTTP server for PM mode
-│   │   └── mcp-tools.js        # MCP tool implementations
+│   │   ├── mcp-tools.js        # MCP tool implementations
+│   │   ├── bridge-server.js    # WebSocket bridge for the iOS companion
+│   │   ├── bridge-tokens.js    # pairing codes + bearer tokens
+│   │   ├── bridge-config.js    # push-relay Worker URL + secret
+│   │   └── push-dispatcher.js  # forwards waiting/error to APNs via the Worker
 │   └── renderer/               # React UI
 │       ├── App.jsx
-│       ├── components/         # Sidebar, Terminal, MissionControl, etc.
+│       ├── components/         # Sidebar, Terminal, MissionControl, PhonePairing, …
 │       ├── styles/             # design tokens + app stylesheet
 │       └── assets/             # logo marks
+├── docs/
+│   ├── bridge-protocol.md      # iOS-companion WebSocket protocol spec
+│   └── SETUP_PUSH.md           # end-to-end push notification setup
 ├── build/                      # icon source + entitlements
 ├── electron-builder.config.js  # signing / notarization / DMG layout
 ├── vite.config.js
-└── test/                       # MCP server tests
+└── test/                       # MCP + bridge tests
 ```
 
 ## Troubleshooting
