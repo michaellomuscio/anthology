@@ -594,7 +594,20 @@ class BridgeServer {
     if (!this.auditPath) return;
     try {
       fs.mkdirSync(path.dirname(this.auditPath), { recursive: true });
-      fs.appendFileSync(this.auditPath, JSON.stringify(record) + '\n');
+      // Size-based rotation. When the active log crosses 5 MB, rename it to
+      // .1 (overwriting any prior rotation) and start fresh. Single rollover
+      // is enough for forensic value without growing without bound.
+      try {
+        const stat = fs.statSync(this.auditPath);
+        if (stat.size > 5 * 1024 * 1024) {
+          fs.renameSync(this.auditPath, this.auditPath + '.1');
+        }
+      } catch (_) { /* file may not exist yet */ }
+      // First write creates with mode 0600 so the audit history isn't
+      // world-readable on this Mac. fs.appendFileSync respects the mode arg
+      // only on file creation; on existing files we re-chmod defensively.
+      fs.appendFileSync(this.auditPath, JSON.stringify(record) + '\n', { mode: 0o600 });
+      try { fs.chmodSync(this.auditPath, 0o600); } catch (_) {}
     } catch (_) {}
   }
 }

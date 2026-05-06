@@ -231,3 +231,55 @@ type Schedule = {
 The bridge sends `serverVersion` in `hello`. The iOS app gates feature use on this. Breaking
 changes bump the path: `/ws` → `/v2/ws`, with `/ws` kept for one minor release for graceful
 upgrade UX. The current protocol is **v1**.
+
+## Threat model
+
+Anthology's bridge is designed for the *personal-Mac, personal-phone, optionally over Tailscale*
+threat model. It is **not** suitable for public-internet exposure without additional hardening.
+
+### What's defended against
+
+- **Pre-auth pairing-code brute-force** — codes are 6 digits, single-use, burn after 3 failed
+  claims, expire after 5 min, with a per-IP rate limit of 5 attempts/min on `/pair`.
+- **Bearer-token brute-force** — tokens carry 288 bits of entropy and are stored as `sha256`
+  hashes server-side. Compromising the token-store file requires file-read access on the Mac.
+- **DNS rebinding** — the WS upgrade rejects any request carrying an `Origin` header (browsers
+  send one; native clients don't), so a malicious page in the user's browser cannot reach the
+  bridge by tricking the OS into resolving `attacker.com` to `100.x.y.z`.
+- **Path traversal** — every session id passing through any handler is constrained to
+  `[a-zA-Z0-9_-]{1,64}` before being used as a file or PTY identifier.
+- **Per-connection flooding** — connections sending more than 200 msgs/sec are dropped.
+- **Memory bombs** — WebSocket frames are capped at 256 KB.
+- **Idle session resource exhaustion** — connections idle > 90 s are cleaned up.
+
+### What's NOT defended against
+
+- **Bytes-on-the-wire confidentiality** — WebSocket frames are plaintext (`ws://`, not `wss://`).
+  Anyone who can read packets between the phone and the Mac can read terminal output and
+  keystrokes. This is acceptable when the network layer provides confidentiality (Tailscale's
+  WireGuard mesh, trusted home Wi-Fi). It is *not* acceptable on hostile networks. **Use
+  Tailscale.**
+- **Compromise of the Mac itself** — root malware on the Mac can read the bearer-token-hash
+  file, the audit log, the userData directory. The bridge's defenses are about authenticated
+  remote access, not about defending the Mac from local compromise.
+- **Bearer-token-equivalent-to-physical-access** — a leaked bearer token grants spawn/kill/input
+  on every session in any directory the Mac user can reach. Treat it like an SSH key. Revoke
+  immediately if you lose your phone (Anthology → phone icon → Revoke next to the device).
+- **Public-internet exposure** — binding the bridge to a public IP is intentional in the code
+  (`0.0.0.0`) for Tailscale interface reachability, but exposing it on a public-internet IP
+  without additional layering (TLS termination, mTLS, IP allowlists, rate-limited reverse proxy)
+  is unsafe.
+
+### Hardening tips for non-default deployments
+
+- **Bind to localhost only**: pass `host: '127.0.0.1'` to `BridgeServer` and use SSH port-forward
+  for the iOS connection. Trades convenience for tighter exposure.
+- **Bind to the Tailscale interface**: more involved — find the Tailscale interface IP and pass
+  it as `host`. Removes LAN exposure entirely.
+- **Add a reverse proxy with mTLS**: terminate `wss://` at a local nginx/Caddy that requires a
+  client certificate, then forward to the bridge. Belt-and-suspenders if you don't trust the
+  network layer.
+
+### Reporting
+
+See `SECURITY.md` in the repo root.

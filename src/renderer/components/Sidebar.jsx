@@ -1,8 +1,6 @@
-import React, { useMemo } from 'react';
-import logoLight from '../assets/logo-mark.svg';
-import logoDark from '../assets/logo-mark-on-dark.svg';
-
-const LOMUSCIO_URL = 'https://www.michaellomuscio.com';
+import React, { useMemo, useState } from 'react';
+import beeMark from '../assets/bee-mark.svg';
+import AboutModal from './AboutModal.jsx';
 
 function SearchIcon() {
   return (
@@ -62,6 +60,7 @@ export default function Sidebar({
   sessions, statuses, unread, activeId, onSelect, onSpawn,
   view, setView, query, setQuery, theme,
 }) {
+  const [showAbout, setShowAbout] = useState(false);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return sessions;
@@ -83,20 +82,17 @@ export default function Sidebar({
         <button
           type="button"
           className="sidebar-logo"
-          title="Lomuscio Labs · michaellomuscio.com"
-          onClick={() => window.open(LOMUSCIO_URL, '_blank', 'noopener,noreferrer')}
+          title="About Anthology"
+          onClick={() => setShowAbout(true)}
         >
-          <img
-            src={theme === 'dark' ? logoDark : logoLight}
-            alt="Lomuscio Labs"
-            draggable={false}
-          />
+          <img src={beeMark} alt="Anthology" draggable={false} />
         </button>
         <div>
           <div className="sidebar-title">ANTHOLOGY</div>
           <div className="sidebar-subtitle">{sessions.length} sessions · {activeCount} active</div>
         </div>
       </div>
+      {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
 
       <div className="sidebar-search">
         <SearchIcon />

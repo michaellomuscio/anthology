@@ -31,39 +31,41 @@ expire. So creating one new key is fine.
 2. Name: `Anthology APNs` · Check **Apple Push Notifications service (APNs)** · Continue
 3. **Register** → **Download** (you only get this download once — save the .p8)
 4. Copy the **Key ID** shown on the success page (10 chars, e.g. `ABC1234XYZ`)
-5. Note your **Team ID** from the top-right of developer.apple.com (already known: `C9562TBW66`)
+5. Note your **Team ID** from the top-right of developer.apple.com (10 chars, e.g. `ABC1234XYZ`)
 
 ### 2 · Enable Push capability for the bundle id
 
 1. <https://developer.apple.com/account/resources/identifiers/list>
-2. Find / create `com.lomusciolabs.anthology-ios`
+2. Find / create the iOS bundle identifier you used in `anthology-ios/project.yml`
 3. Toggle **Push Notifications** → Save
 
 ### 3 · Deploy the Cloudflare Worker
 
 ```bash
-cd /Users/michaellomuscio/projects/anthology-push-worker
+cd path/to/anthology-push-worker
 npm install
 npx wrangler login                # one-time browser auth
-npx wrangler deploy               # gives you https://anthology-push.<your-subdomain>.workers.dev
+npx wrangler deploy               # gives you https://anthology-push.<your-cf-subdomain>.workers.dev
 
-# Generate a secret the Mac will use to call the Worker. Save it — you'll
-# paste it into Anthology in step 4.
-openssl rand -hex 32 | tee /tmp/anthology-worker-secret.txt
+# Generate a secret the Mac will use to call the Worker. Save it somewhere
+# safe — you'll paste it into Anthology in step 4.
+SECRETS_DIR="$HOME/Documents/Anthology Secrets"
+mkdir -p "$SECRETS_DIR" && chmod 700 "$SECRETS_DIR"
+openssl rand -hex 32 > "$SECRETS_DIR/worker-secret.txt"
+chmod 600 "$SECRETS_DIR/worker-secret.txt"
 
 # Set Worker secrets. Wrangler prompts you to paste each value.
-cat /tmp/anthology-worker-secret.txt | npx wrangler secret put WORKER_SECRET
-cat ~/Downloads/AuthKey_ABC1234XYZ.p8 | npx wrangler secret put APNS_AUTH_KEY
-echo "ABC1234XYZ"           | npx wrangler secret put APNS_KEY_ID
-echo "C9562TBW66"           | npx wrangler secret put APNS_TEAM_ID
-echo "com.lomusciolabs.anthology-ios" | npx wrangler secret put APNS_BUNDLE_ID
+cat "$SECRETS_DIR/worker-secret.txt" | npx wrangler secret put WORKER_SECRET
+cat path/to/AuthKey_<KEY_ID>.p8     | npx wrangler secret put APNS_AUTH_KEY
+echo "<your-key-id>"                | npx wrangler secret put APNS_KEY_ID
+echo "<your-team-id>"               | npx wrangler secret put APNS_TEAM_ID
+echo "<your-bundle-id>"             | npx wrangler secret put APNS_BUNDLE_ID
 ```
 
 Test the Worker:
 
 ```bash
-SECRET=$(cat /tmp/anthology-worker-secret.txt)
-curl -i -X POST https://anthology-push.<your-subdomain>.workers.dev/health
+curl -i https://anthology-push.<your-cf-subdomain>.workers.dev/health
 # 200, { "ok": true, "version": 1 }
 ```
 

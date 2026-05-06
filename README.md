@@ -209,7 +209,7 @@ A few design choices worth calling out:
 
 - **No telemetry.** Anthology makes zero network calls of its own. The only outbound traffic comes from the `claude` subprocesses themselves — identical to running `claude` in a regular terminal.
 - **Local-only state.** Sessions, scrollback buffers, and schedules live in `~/Library/Application Support/anthology/` and never leave the machine.
-- **Signed and notarized.** Distributed builds are signed with Apple Developer ID `C9562TBW66` and notarized through Apple's notary service.
+- **Signed and notarized.** Distributed builds are signed with an Apple Developer ID and notarized through Apple's notary service.
 - **MCP scope-limited.** The local MCP server binds to localhost, uses a per-session token, and validates all session IDs against a path-traversal-safe character class before touching disk.
 - **URL allow-list.** Clickable links in terminal output (via the WebLinks addon) are restricted to `http(s)://` and `mailto:` — printed `file://` or custom-scheme URLs cannot trigger native side effects.
 
