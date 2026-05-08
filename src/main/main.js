@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const PtyManager = require('./pty-manager');
 const SessionsStore = require('./sessions-store');
+const GroupsStore = require('./groups-store');
 const BufferStore = require('./buffer-store');
 const BridgeServer = require('./bridge-server');
 const BridgeTokens = require('./bridge-tokens');
@@ -73,6 +74,7 @@ app.setName(APP_NAME);
 let mainWindow = null;
 let ptyManager = null;
 let sessionsStore = null;
+let groupsStore = null;
 let bufferStore = null;
 let mcpServer = null;
 let mcpInfo = null; // { port, token }
@@ -205,6 +207,7 @@ app.whenReady().then(async () => {
   }
 
   sessionsStore = new SessionsStore(app.getPath('userData'));
+  groupsStore = new GroupsStore(app.getPath('userData'));
   bufferStore = new BufferStore(app.getPath('userData'));
   bridgeTokens = new BridgeTokens(app.getPath('userData'));
   bridgeConfig = new BridgeConfig(app.getPath('userData'));
@@ -417,6 +420,23 @@ function registerIpcHandlers() {
   });
   ipcMain.handle('sessions:recentDirs', () => sessionsStore.listRecentDirs());
 
+  // -------------------- Groups (sidebar folders) --------------------
+  ipcMain.handle('groups:list', () => groupsStore.list());
+  ipcMain.handle('groups:upsert', (_e, group) => groupsStore.upsert(group));
+  ipcMain.handle('groups:delete', (_e, id) => {
+    // Clear groupId from any sessions that referenced this group so they
+    // don't end up pointing at a phantom; the renderer also sees these as
+    // 'Ungrouped' on next reload.
+    const affected = sessionsStore.list().filter((s) => s.groupId === id);
+    for (const s of affected) {
+      const updated = sessionsStore.upsert({ ...s, groupId: null });
+      if (bridgeServer) bridgeServer.handleSessionMeta(updated || s);
+    }
+    groupsStore.remove(id);
+    return { ok: true, affected: affected.map((s) => s.id) };
+  });
+  ipcMain.handle('groups:reorder', (_e, ids) => groupsStore.reorder(ids));
+
   // -------------------- Bridge (phone companion) --------------------
   ipcMain.handle('bridge:info', () => {
     if (!bridgeServer || !bridgeInfo) return { running: false };
@@ -572,6 +592,13 @@ function registerIpcHandlers() {
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
+  });
+  ipcMain.handle('dialog:pickFiles', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile', 'multiSelections', 'treatPackageAsDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return [];
+    return result.filePaths;
   });
 
   // -------------------- Notifications + dock badge --------------------

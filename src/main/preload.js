@@ -1,6 +1,6 @@
 'use strict';
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('station', {
   // Sessions store
@@ -8,6 +8,12 @@ contextBridge.exposeInMainWorld('station', {
   saveSession: (session) => ipcRenderer.invoke('sessions:save', session),
   deleteSession: (id) => ipcRenderer.invoke('sessions:delete', id),
   listRecentDirs: () => ipcRenderer.invoke('sessions:recentDirs'),
+
+  // Groups (sidebar folders)
+  listGroups: () => ipcRenderer.invoke('groups:list'),
+  saveGroup: (group) => ipcRenderer.invoke('groups:upsert', group),
+  deleteGroup: (id) => ipcRenderer.invoke('groups:delete', id),
+  reorderGroups: (ids) => ipcRenderer.invoke('groups:reorder', ids),
 
   // PTY
   createPty: (opts) => ipcRenderer.invoke('pty:create', opts),
@@ -62,6 +68,16 @@ contextBridge.exposeInMainWorld('station', {
 
   // Dialogs / app info
   pickDirectory: () => ipcRenderer.invoke('dialog:pickDirectory'),
+  pickFiles: () => ipcRenderer.invoke('dialog:pickFiles'),
+  // Resolve a File (from drag-and-drop or <input type=file>) to its absolute
+  // filesystem path. webUtils.getPathForFile is the supported replacement for
+  // the deprecated File.path; fall back if running on an older Electron.
+  getPathForFile: (file) => {
+    try {
+      if (webUtils?.getPathForFile) return webUtils.getPathForFile(file) || '';
+    } catch (_) {}
+    return (file && file.path) || '';
+  },
   getHome: () => ipcRenderer.invoke('app:home'),
   getPlatform: () => ipcRenderer.invoke('app:platform'),
 

@@ -19,11 +19,16 @@ function uid() {
   return 's_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3);
 }
 
+function gid() {
+  return 'g_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3);
+}
+
 export default function App() {
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('cs-theme') || 'dark';
   });
   const [sessions, setSessions] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [view, setView] = useState('mission'); // 'mission' | 'session'
   const [query, setQuery] = useState('');
@@ -54,8 +59,12 @@ export default function App() {
   // Initial load
   useEffect(() => {
     (async () => {
-      const stored = await station.listSessions();
+      const [stored, storedGroups] = await Promise.all([
+        station.listSessions(),
+        station.listGroups ? station.listGroups() : Promise.resolve([]),
+      ]);
       setSessions(stored);
+      setGroups(storedGroups || []);
       const initialStatus = {};
       const initialActivity = {};
       for (const s of stored) {
@@ -315,6 +324,38 @@ export default function App() {
     });
   };
 
+  // -------------------- Sidebar groups (folders) --------------------
+  const handleCreateGroup = async (name) => {
+    const id = gid();
+    const group = { id, name, createdAt: Date.now() };
+    setGroups((prev) => [...prev, group]);
+    try { await station.saveGroup(group); } catch (_) {}
+  };
+  const handleRenameGroup = async (id, name) => {
+    setGroups((prev) => prev.map((g) => g.id === id ? { ...g, name } : g));
+    try { await station.saveGroup({ id, name }); } catch (_) {}
+  };
+  const handleDeleteGroup = async (id) => {
+    setGroups((prev) => prev.filter((g) => g.id !== id));
+    setSessions((prev) => prev.map((s) => s.groupId === id ? { ...s, groupId: null } : s));
+    try { await station.deleteGroup(id); } catch (_) {}
+  };
+  const handleMoveSession = async (sessionId, groupId) => {
+    let next = null;
+    setSessions((prev) => {
+      const out = prev.map((s) => {
+        if (s.id !== sessionId) return s;
+        const updated = { ...s, groupId: groupId || null };
+        next = updated;
+        return updated;
+      });
+      return out;
+    });
+    if (next) {
+      try { await station.saveSession(next); } catch (_) {}
+    }
+  };
+
   const active = sessions.find((s) => s.id === activeId) || null;
 
   return (
@@ -335,6 +376,11 @@ export default function App() {
         query={query}
         setQuery={setQuery}
         theme={theme}
+        groups={groups}
+        onCreateGroup={handleCreateGroup}
+        onRenameGroup={handleRenameGroup}
+        onDeleteGroup={handleDeleteGroup}
+        onMoveSession={handleMoveSession}
       />
 
       <div className="main">

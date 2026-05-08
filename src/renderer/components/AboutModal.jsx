@@ -5,7 +5,7 @@ const REPO_URL = 'https://github.com/michaellomuscio/anthology';
 const AUTHOR_URL = 'https://www.michaellomuscio.com';
 const LICENSE_URL = 'https://github.com/michaellomuscio/anthology/blob/main/LICENSE';
 
-const VERSION = '0.3.1';
+const VERSION = '0.4.0';
 
 export default function AboutModal({ onClose }) {
   const open = (href) => {
