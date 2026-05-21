@@ -5,6 +5,7 @@ import SessionView from './components/SessionView.jsx';
 import MissionControl from './components/MissionControl.jsx';
 import SpawnModal from './components/SpawnModal.jsx';
 import CommandPalette from './components/CommandPalette.jsx';
+import SlashPalette from './components/SlashPalette.jsx';
 import Schedules from './components/Schedules.jsx';
 import OnboardingTour from './components/OnboardingTour.jsx';
 import HelpGuide from './components/HelpGuide.jsx';
@@ -19,16 +20,22 @@ function uid() {
   return 's_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3);
 }
 
+function gid() {
+  return 'g_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3);
+}
+
 export default function App() {
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('cs-theme') || 'dark';
   });
   const [sessions, setSessions] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [view, setView] = useState('mission'); // 'mission' | 'session'
   const [query, setQuery] = useState('');
   const [showSpawn, setShowSpawn] = useState(false);
   const [showCmdK, setShowCmdK] = useState(false);
+  const [showSlash, setShowSlash] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   const [phoneClientCount, setPhoneClientCount] = useState(0);
@@ -39,6 +46,7 @@ export default function App() {
   const [statuses, setStatuses] = useState({}); // id -> 'running' | 'idle' | 'waiting' | 'error'
   const [unread, setUnread] = useState({}); // id -> count
   const [lastActivity, setLastActivity] = useState({}); // id -> ts ms
+  const [redactionCounts, setRedactionCounts] = useState({}); // id -> lifetime redactions
 
   const activeIdRef = useRef(activeId);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
@@ -54,8 +62,12 @@ export default function App() {
   // Initial load
   useEffect(() => {
     (async () => {
-      const stored = await station.listSessions();
+      const [stored, storedGroups] = await Promise.all([
+        station.listSessions(),
+        station.listGroups ? station.listGroups() : Promise.resolve([]),
+      ]);
       setSessions(stored);
+      setGroups(storedGroups || []);
       const initialStatus = {};
       const initialActivity = {};
       for (const s of stored) {
@@ -74,6 +86,16 @@ export default function App() {
   const fireToast = useCallback((msg) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2400);
+  }, []);
+
+  // Redaction count events — fire whenever the main-process scrubber masks
+  // something so the session header's shield badge can show a running total.
+  useEffect(() => {
+    if (!station.onPtyRedaction) return undefined;
+    const off = station.onPtyRedaction(({ id, total }) => {
+      setRedactionCounts((prev) => (prev[id] === total ? prev : { ...prev, [id]: total }));
+    });
+    return off;
   }, []);
 
   // Pty status events
@@ -220,8 +242,15 @@ export default function App() {
 
       if (meta && e.key.toLowerCase() === 'k') { e.preventDefault(); setShowCmdK(v => !v); return; }
       if (meta && e.key.toLowerCase() === 'n') { e.preventDefault(); setShowSpawn(true); return; }
+      // Cmd+/ opens the slash-command palette for the active session. Only
+      // useful when a session is actually open — silently no-op in Mission
+      // Control so the shortcut doesn't confuse the user.
+      if (meta && e.key === '/') {
+        if (activeIdRef.current) { e.preventDefault(); setShowSlash(true); }
+        return;
+      }
       if (meta && e.key === '\\') { e.preventDefault(); setView(v => v === 'session' ? 'mission' : 'session'); return; }
-      if (e.key === 'Escape') { setShowSpawn(false); setShowCmdK(false); return; }
+      if (e.key === 'Escape') { setShowSpawn(false); setShowCmdK(false); setShowSlash(false); return; }
 
       // Cmd+1..9 jumps to session N (works even while terminal is focused)
       if (meta && /^[1-9]$/.test(e.key)) {
@@ -315,6 +344,64 @@ export default function App() {
     });
   };
 
+  // -------------------- Sidebar groups (folders) --------------------
+  const handleCreateGroup = async (name) => {
+    const id = gid();
+    const group = { id, name, createdAt: Date.now() };
+    setGroups((prev) => [...prev, group]);
+    try { await station.saveGroup(group); } catch (_) {}
+  };
+  const handleRenameGroup = async (id, name) => {
+    setGroups((prev) => prev.map((g) => g.id === id ? { ...g, name } : g));
+    try { await station.saveGroup({ id, name }); } catch (_) {}
+  };
+  const handleDeleteGroup = async (id) => {
+    setGroups((prev) => prev.filter((g) => g.id !== id));
+    setSessions((prev) => prev.map((s) => s.groupId === id ? { ...s, groupId: null } : s));
+    try { await station.deleteGroup(id); } catch (_) {}
+  };
+  const handleToggleMaskSecrets = async (id) => {
+    // Optimistic flip: source of truth is the live PtyManager, but we also
+    // persist on the session object so a future spawn (after kill/restart or
+    // app relaunch) starts in the right state.
+    let next = null;
+    setSessions((prev) => {
+      const out = prev.map((s) => {
+        if (s.id !== id) return s;
+        const enabled = s.maskSecrets === false; // toggle: undefined/true → false, false → true
+        const updated = { ...s, maskSecrets: enabled };
+        next = updated;
+        return updated;
+      });
+      return out;
+    });
+    if (next) {
+      try {
+        const enabled = next.maskSecrets !== false;
+        await station.setMaskSecrets(id, enabled);
+        await station.saveSession(next);
+      } catch (e) {
+        console.warn('[mask] toggle failed:', e?.message);
+      }
+    }
+  };
+
+  const handleMoveSession = async (sessionId, groupId) => {
+    let next = null;
+    setSessions((prev) => {
+      const out = prev.map((s) => {
+        if (s.id !== sessionId) return s;
+        const updated = { ...s, groupId: groupId || null };
+        next = updated;
+        return updated;
+      });
+      return out;
+    });
+    if (next) {
+      try { await station.saveSession(next); } catch (_) {}
+    }
+  };
+
   const active = sessions.find((s) => s.id === activeId) || null;
 
   return (
@@ -335,6 +422,11 @@ export default function App() {
         query={query}
         setQuery={setQuery}
         theme={theme}
+        groups={groups}
+        onCreateGroup={handleCreateGroup}
+        onRenameGroup={handleRenameGroup}
+        onDeleteGroup={handleDeleteGroup}
+        onMoveSession={handleMoveSession}
       />
 
       <div className="main">
@@ -356,9 +448,12 @@ export default function App() {
             session={active}
             status={statuses[active.id] || 'idle'}
             lastActivity={lastActivity[active.id]}
+            redactionCount={redactionCounts[active.id] || 0}
             onKill={handleKill}
             onPin={handlePin}
             onRename={handleRename}
+            onToggleMaskSecrets={handleToggleMaskSecrets}
+            onOpenSlashPalette={() => setShowSlash(true)}
           />
         ) : view === 'schedules' ? (
           <Schedules onJump={handleSelect} />
@@ -386,6 +481,13 @@ export default function App() {
           statuses={statuses}
           onSelect={(id) => { setShowCmdK(false); handleSelect(id); }}
           onClose={() => setShowCmdK(false)}
+        />
+      )}
+
+      {showSlash && activeId && (
+        <SlashPalette
+          sessionId={activeId}
+          onClose={() => setShowSlash(false)}
         />
       )}
 

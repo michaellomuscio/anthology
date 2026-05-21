@@ -6,11 +6,13 @@ const fs = require('node:fs');
 const os = require('node:os');
 const PtyManager = require('./pty-manager');
 const SessionsStore = require('./sessions-store');
+const GroupsStore = require('./groups-store');
 const BufferStore = require('./buffer-store');
 const BridgeServer = require('./bridge-server');
 const BridgeTokens = require('./bridge-tokens');
 const BridgeConfig = require('./bridge-config');
 const PushDispatcher = require('./push-dispatcher');
+const CloudflaredManager = require('./cloudflared-manager');
 
 // Reject ids that could escape userData via path traversal or null bytes.
 // Mirror BufferStore.pathFor's character set so all on-disk artifacts share
@@ -73,6 +75,7 @@ app.setName(APP_NAME);
 let mainWindow = null;
 let ptyManager = null;
 let sessionsStore = null;
+let groupsStore = null;
 let bufferStore = null;
 let mcpServer = null;
 let mcpInfo = null; // { port, token }
@@ -82,6 +85,7 @@ let bridgeTokens = null;
 let bridgeConfig = null;
 let pushDispatcher = null;
 let bridgeInfo = null; // { port }
+let cloudflaredManager = null;
 let powerSaveBlockerId = null;
 
 // Standard macOS application menu, but with the leftmost label forced to
@@ -205,6 +209,7 @@ app.whenReady().then(async () => {
   }
 
   sessionsStore = new SessionsStore(app.getPath('userData'));
+  groupsStore = new GroupsStore(app.getPath('userData'));
   bufferStore = new BufferStore(app.getPath('userData'));
   bridgeTokens = new BridgeTokens(app.getPath('userData'));
   bridgeConfig = new BridgeConfig(app.getPath('userData'));
@@ -311,6 +316,13 @@ app.whenReady().then(async () => {
     bridgeServer,
     sessionsStore,
   });
+
+  // Cloudflare Tunnel manager — gives us a public URL that survives any
+  // network/firewall. Not started automatically; the user opts in from the
+  // PhonePairing UI when LAN/Tailscale can't reach the Mac.
+  cloudflaredManager = new CloudflaredManager({
+    onStatusChange: (s) => sendToRendererOnly('tunnel:status', s),
+  });
   if (bridgeConfig.isPushConfigured()) {
     console.log('[push] configured: forwarding waiting/error transitions to', bridgeConfig.data.workerUrl);
   }
@@ -378,6 +390,9 @@ app.on('before-quit', (e) => {
       try { powerSaveBlocker.stop(powerSaveBlockerId); } catch (_) {}
       powerSaveBlockerId = null;
     }
+    if (cloudflaredManager) {
+      try { cloudflaredManager.stop(); } catch (_) {}
+    }
   };
   if (didFlush || !mainWindow || mainWindow.isDestroyed()) {
     teardown();
@@ -417,6 +432,23 @@ function registerIpcHandlers() {
   });
   ipcMain.handle('sessions:recentDirs', () => sessionsStore.listRecentDirs());
 
+  // -------------------- Groups (sidebar folders) --------------------
+  ipcMain.handle('groups:list', () => groupsStore.list());
+  ipcMain.handle('groups:upsert', (_e, group) => groupsStore.upsert(group));
+  ipcMain.handle('groups:delete', (_e, id) => {
+    // Clear groupId from any sessions that referenced this group so they
+    // don't end up pointing at a phantom; the renderer also sees these as
+    // 'Ungrouped' on next reload.
+    const affected = sessionsStore.list().filter((s) => s.groupId === id);
+    for (const s of affected) {
+      const updated = sessionsStore.upsert({ ...s, groupId: null });
+      if (bridgeServer) bridgeServer.handleSessionMeta(updated || s);
+    }
+    groupsStore.remove(id);
+    return { ok: true, affected: affected.map((s) => s.id) };
+  });
+  ipcMain.handle('groups:reorder', (_e, ids) => groupsStore.reorder(ids));
+
   // -------------------- Bridge (phone companion) --------------------
   ipcMain.handle('bridge:info', () => {
     if (!bridgeServer || !bridgeInfo) return { running: false };
@@ -430,19 +462,26 @@ function registerIpcHandlers() {
     };
   });
   ipcMain.handle('bridge:network-info', () => listConnectivityAddresses());
-  ipcMain.handle('bridge:pair-start', () => {
+  ipcMain.handle('bridge:pair-start', (_e, opts) => {
     if (!bridgeServer || !bridgeInfo) throw new Error('bridge_not_running');
     const { code, expiresAt } = bridgeTokens.startPairing();
     const addrs = listConnectivityAddresses();
+    // Caller can override host/port when pairing through the Cloudflare Tunnel
+    // — same pairing code, different reachable address. The iOS app selects
+    // the WebSocket scheme based on the port (443 → wss).
+    const tunnelHost = typeof opts?.tunnelHost === 'string' ? opts.tunnelHost : null;
+    const tunnelPort = typeof opts?.tunnelPort === 'number' ? opts.tunnelPort : null;
     const preferred = addrs[0] || null;
-    const host = preferred ? preferred.ip : '127.0.0.1';
-    const url = `anthology://pair?host=${encodeURIComponent(host)}&port=${bridgeInfo.port}&code=${code}`;
+    const host = tunnelHost || (preferred ? preferred.ip : '127.0.0.1');
+    const port = tunnelPort || bridgeInfo.port;
+    const kind = tunnelHost ? 'tunnel' : (preferred ? preferred.kind : 'loopback');
+    const url = `anthology://pair?host=${encodeURIComponent(host)}&port=${port}&code=${code}`;
     return {
       code,
       expiresAt,
-      port: bridgeInfo.port,
+      port,
       preferredHost: host,
-      preferredKind: preferred ? preferred.kind : 'loopback',
+      preferredKind: kind,
       url,
       addresses: addrs,
     };
@@ -464,6 +503,21 @@ function registerIpcHandlers() {
     return bridgeConfig.publicView();
   });
 
+  // -------------------- Cloudflare Tunnel --------------------
+  ipcMain.handle('tunnel:status', () => {
+    return cloudflaredManager ? cloudflaredManager.status() : { installed: false, running: false };
+  });
+  ipcMain.handle('tunnel:start', async () => {
+    if (!cloudflaredManager) throw new Error('tunnel_manager_unavailable');
+    if (!bridgeInfo) throw new Error('bridge_not_running');
+    return cloudflaredManager.start(bridgeInfo.port);
+  });
+  ipcMain.handle('tunnel:stop', () => {
+    if (!cloudflaredManager) return false;
+    cloudflaredManager.stop();
+    return true;
+  });
+
   // -------------------- PTY management --------------------
   // Public pty:create deliberately drops `command` — only the privileged
   // pty:create-pm path constructs commands (with controlled shell quoting).
@@ -479,6 +533,7 @@ function registerIpcHandlers() {
       cols,
       rows,
       runClaude: opts?.runClaude !== false,
+      maskSecrets: opts?.maskSecrets !== false,
     });
   });
   ipcMain.handle('pty:write', (_e, { id, data }) => {
@@ -500,6 +555,21 @@ function registerIpcHandlers() {
   ipcMain.handle('pty:exists', (_e, id) => {
     const sid = safeId(id);
     return sid ? ptyManager.exists(sid) : false;
+  });
+
+  // -------------------- Secret masking --------------------
+  ipcMain.handle('pty:set-mask-secrets', (_e, { id, enabled }) => {
+    const sid = safeId(id);
+    if (!sid) return false;
+    return ptyManager.setMaskSecrets(sid, !!enabled);
+  });
+  ipcMain.handle('pty:get-mask-state', (_e, id) => {
+    const sid = safeId(id);
+    if (!sid) return null;
+    return {
+      maskSecrets: ptyManager.getMaskSecrets(sid),
+      redactionCount: ptyManager.getRedactionCount(sid),
+    };
   });
 
   // -------------------- PM session creation (claude with MCP tools) --------------------
@@ -535,6 +605,7 @@ function registerIpcHandlers() {
       rows: opts.rows,
       runClaude: true,
       command,
+      maskSecrets: opts?.maskSecrets !== false,
     });
   });
 
@@ -572,6 +643,13 @@ function registerIpcHandlers() {
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
+  });
+  ipcMain.handle('dialog:pickFiles', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile', 'multiSelections', 'treatPackageAsDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return [];
+    return result.filePaths;
   });
 
   // -------------------- Notifications + dock badge --------------------

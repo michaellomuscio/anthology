@@ -21,6 +21,7 @@ function kindLabel(kind) {
   if (kind === 'tailscale') return 'Tailscale';
   if (kind === 'lan') return 'Local network';
   if (kind === 'public') return 'Public IP';
+  if (kind === 'tunnel') return 'Cloudflare Tunnel';
   return 'Address';
 }
 
@@ -28,6 +29,7 @@ function kindHint(kind) {
   if (kind === 'tailscale') return 'Best for use away from your home network.';
   if (kind === 'lan') return 'Works while your phone is on the same Wi-Fi.';
   if (kind === 'public') return 'Reachable from the internet — verify intended.';
+  if (kind === 'tunnel') return 'Works anywhere — even behind work-wifi firewalls.';
   return '';
 }
 
@@ -42,20 +44,51 @@ export default function PhonePairing({ onClose }) {
   const [pushUrlDraft, setPushUrlDraft] = useState('');
   const [pushSecretDraft, setPushSecretDraft] = useState('');
   const [pushSaving, setPushSaving] = useState(false);
+  const [tunnel, setTunnel] = useState(null);
+  const [tunnelBusy, setTunnelBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [i, t, p] = await Promise.all([
+      const [i, t, p, tn] = await Promise.all([
         station.bridgeInfo(),
         station.bridgeTokensList(),
         station.bridgePushConfig ? station.bridgePushConfig() : Promise.resolve({ pushConfigured: false }),
+        station.tunnelStatus ? station.tunnelStatus() : Promise.resolve(null),
       ]);
       setInfo(i);
       setTokens(t || []);
       setPushConfig(p);
       setPushUrlDraft((d) => d || (p && p.workerUrl) || '');
+      if (tn) setTunnel(tn);
     } catch (_) { /* best effort */ }
   }, []);
+
+  const startTunnel = async () => {
+    if (tunnelBusy) return;
+    setTunnelBusy(true);
+    try { await station.tunnelStart(); }
+    catch (e) { /* status payload will surface the lastError */ }
+    finally { setTunnelBusy(false); refresh(); }
+  };
+  const stopTunnel = async () => {
+    if (tunnelBusy) return;
+    setTunnelBusy(true);
+    try { await station.tunnelStop(); } finally { setTunnelBusy(false); refresh(); }
+  };
+  const pairViaTunnel = async () => {
+    if (!tunnel?.url) return;
+    try {
+      const host = new URL(tunnel.url).hostname;
+      const p = await station.bridgePairStart({ tunnelHost: host, tunnelPort: 443 });
+      setPairing(p);
+      const url = await QRCode.toDataURL(p.url, {
+        width: 240, margin: 1, errorCorrectionLevel: 'M',
+        color: { dark: '#0A0A0B', light: '#FFFFFF' },
+      });
+      setQrUrl(url);
+      refresh();
+    } catch (e) { console.error('tunnel pair start failed', e); }
+  };
 
   const savePushConfig = async () => {
     setPushSaving(true);
@@ -87,10 +120,12 @@ export default function PhonePairing({ onClose }) {
 
   useEffect(() => {
     refresh();
-    const off = station.onBridgeClients(() => refresh());
+    const offClients = station.onBridgeClients(() => refresh());
+    const offTunnel = station.onTunnelStatus ? station.onTunnelStatus((s) => setTunnel(s)) : null;
     const interval = setInterval(refresh, 4000);
     return () => {
-      try { off && off(); } catch (_) {}
+      try { offClients && offClients(); } catch (_) {}
+      try { offTunnel && offTunnel(); } catch (_) {}
       clearInterval(interval);
     };
   }, [refresh]);
@@ -257,6 +292,53 @@ export default function PhonePairing({ onClose }) {
               </div>
             </div>
           )}
+
+          {/* Cloudflare Tunnel — public URL that works behind firewalls */}
+          <div className="phone-pair-tunnel">
+            <div className="field-label">Cloudflare Tunnel (works anywhere)</div>
+            <p className="phone-pair-blurb">
+              When LAN / Tailscale can't reach your Mac (work wifi blocks it, you're on cellular, etc.),
+              start a Cloudflare Tunnel and pair through that — both devices connect outbound to Cloudflare,
+              so no firewall needs to allow inbound. Quick tunnels are free; the URL changes each restart.
+            </p>
+            {!tunnel?.installed ? (
+              <div className="phone-pair-tunnel-row">
+                <span className="phone-pair-kind phone-pair-kind--public">Not installed</span>
+                <code>brew install cloudflared</code>
+                <span className="phone-pair-tunnel-hint">Install once, then come back here.</span>
+              </div>
+            ) : tunnel?.running && tunnel?.url ? (
+              <div className="phone-pair-tunnel-row">
+                <span className="phone-pair-kind phone-pair-kind--tunnel">Running</span>
+                <code>{tunnel.url}</code>
+                <div className="phone-pair-tunnel-actions">
+                  <button
+                    type="button"
+                    onClick={pairViaTunnel}
+                    disabled={!!pairing}
+                  >
+                    Pair via tunnel
+                  </button>
+                  <button type="button" onClick={stopTunnel} disabled={tunnelBusy}>Stop tunnel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="phone-pair-tunnel-row">
+                <span className="phone-pair-kind phone-pair-kind--lan">Stopped</span>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={startTunnel}
+                  disabled={tunnelBusy}
+                >
+                  {tunnelBusy ? 'Starting…' : 'Start tunnel'}
+                </button>
+                {tunnel?.lastError && (
+                  <span className="phone-pair-tunnel-hint phone-pair-tunnel-err">{tunnel.lastError}</span>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Push relay config */}
           <div className="phone-pair-push">

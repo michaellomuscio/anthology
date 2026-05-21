@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -7,6 +7,7 @@ import { ImageAddon } from '@xterm/addon-image';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { SearchAddon } from '@xterm/addon-search';
 import { SerializeAddon } from '@xterm/addon-serialize';
+import { isFileDrag, pathsFromDropEvent, insertPathsIntoSession } from '../files.js';
 
 // Cap how much scrollback we serialize to disk per session — full xterm state
 // can balloon for verbose claude runs; this keeps writes snappy and userData
@@ -141,7 +142,7 @@ function installFlushHandler() {
 }
 installFlushHandler();
 
-async function ensureSession(sessionId, cwd, isPM, wasExited = false) {
+async function ensureSession(sessionId, cwd, isPM, wasExited = false, maskSecrets = true) {
   let entry = terminalCache.get(sessionId);
   let freshEntry = false;
   if (!entry) {
@@ -200,9 +201,9 @@ async function ensureSession(sessionId, cwd, isPM, wasExited = false) {
     // navigating away and back would silently spawn a fresh claude.
     if (!exists && !entry.exited) {
       if (isPM) {
-        await station.createPmPty({ id: sessionId, cwd });
+        await station.createPmPty({ id: sessionId, cwd, maskSecrets });
       } else {
-        await station.createPty({ id: sessionId, cwd, runClaude: true });
+        await station.createPty({ id: sessionId, cwd, runClaude: true, maskSecrets });
       }
     }
     entry.started = true;
@@ -215,10 +216,11 @@ async function ensureSession(sessionId, cwd, isPM, wasExited = false) {
 }
 
 async function restartSession(entry, session) {
+  const maskSecrets = session.maskSecrets !== false;
   if (session.isPM) {
-    await station.createPmPty({ id: session.id, cwd: session.cwd });
+    await station.createPmPty({ id: session.id, cwd: session.cwd, maskSecrets });
   } else {
-    await station.createPty({ id: session.id, cwd: session.cwd, runClaude: true });
+    await station.createPty({ id: session.id, cwd: session.cwd, runClaude: true, maskSecrets });
   }
   entry.exited = false;
   if (!entry.persistTimer) {
@@ -233,7 +235,44 @@ export default function TerminalPane({ session }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [exited, setExited] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  const [dropping, setDropping] = useState(false);
+  // dragenter/leave fire on every child crossing — track depth so the overlay
+  // doesn't flicker as the user drags over the inner xterm DOM.
+  const dragDepth = useRef(0);
   const searchInputRef = useRef(null);
+
+  const handleDragOver = useCallback((e) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+  }, []);
+
+  const handleDragEnter = useCallback((e) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDropping(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e) => {
+    if (!isFileDrag(e)) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDropping(false);
+  }, []);
+
+  const handleDrop = useCallback((e) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepth.current = 0;
+    setDropping(false);
+    const paths = pathsFromDropEvent(e);
+    if (paths.length && session?.id) {
+      insertPathsIntoSession(session.id, paths);
+      try { entryRef.current?.term?.focus(); } catch (_) {}
+    }
+  }, [session?.id]);
 
   // Mount xterm into the DOM whenever the active session changes.
   useEffect(() => {
@@ -244,7 +283,7 @@ export default function TerminalPane({ session }) {
     let resizeDebounceTimer = null;
 
     (async () => {
-      const entry = await ensureSession(session.id, session.cwd, session.isPM, !!session.exitedAt);
+      const entry = await ensureSession(session.id, session.cwd, session.isPM, !!session.exitedAt, session.maskSecrets !== false);
       if (cancelled) return;
       entryRef.current = entry;
       setExited(!!entry.exited);
@@ -395,7 +434,25 @@ export default function TerminalPane({ session }) {
   };
 
   return (
-    <div className="terminal-pane">
+    <div
+      className="terminal-pane"
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {dropping && (
+        <div className="terminal-drop-overlay" aria-hidden>
+          <div className="terminal-drop-hint">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 3v5h5" />
+              <path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9z" />
+              <path d="M12 11v7m0-7-3 3m3-3 3 3" />
+            </svg>
+            Drop to insert path
+          </div>
+        </div>
+      )}
       {exited && (
         <div className="terminal-exit-banner">
           <span className="terminal-exit-banner-label">Session ended</span>
