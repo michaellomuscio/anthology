@@ -534,6 +534,9 @@ function registerIpcHandlers() {
       rows,
       runClaude: opts?.runClaude !== false,
       maskSecrets: opts?.maskSecrets !== false,
+      // 'claude' (default) or 'codex'. PM sessions go through pty:create-pm,
+      // which always uses claude (MCP-tools attach is Claude-specific in v1).
+      agentTool: opts?.agentTool === 'codex' ? 'codex' : 'claude',
     });
   });
   ipcMain.handle('pty:write', (_e, { id, data }) => {
@@ -555,6 +558,15 @@ function registerIpcHandlers() {
   ipcMain.handle('pty:exists', (_e, id) => {
     const sid = safeId(id);
     return sid ? ptyManager.exists(sid) : false;
+  });
+
+  // Send a multi-line prompt as if the user pasted it and hit Enter.
+  // Wraps in bracketed-paste markers so the receiving TUI (Claude Code)
+  // treats it as a single paste rather than per-keystroke input.
+  ipcMain.handle('pty:submit-prompt', (_e, { id, text }) => {
+    const sid = safeId(id);
+    if (!sid || typeof text !== 'string') return false;
+    return ptyManager.submitPrompt(sid, text);
   });
 
   // -------------------- Secret masking --------------------

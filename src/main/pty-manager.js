@@ -131,7 +131,7 @@ class PtyManager {
     this.statusTimer = setInterval(() => this.tickStatuses(), STATUS_TICK_MS);
   }
 
-  create({ id, cwd, cols = 100, rows = 30, command = null, runClaude = true, maskSecrets = true }) {
+  create({ id, cwd, cols = 100, rows = 30, command = null, runClaude = true, maskSecrets = true, agentTool = 'claude' }) {
     if (this.sessions.has(id)) {
       // Already exists — return current snapshot
       return { id, alive: true };
@@ -149,7 +149,12 @@ class PtyManager {
     // shell run rc files FIRST and only then exec the command.
     let shellArgs;
     if (runClaude || command) {
-      const cmd = (command || 'exec claude').replace(/[\r\n]+$/, '');
+      // Pick the agent binary. PM sessions pass an explicit `command` that
+      // wins; otherwise we pick by agentTool. Codex sessions just `exec codex`
+      // and inherit the user's interactive shell env so PATH resolves the
+      // binary the same way `which codex` would in their terminal.
+      const defaultCmd = agentTool === 'codex' ? 'exec codex' : 'exec claude';
+      const cmd = (command || defaultCmd).replace(/[\r\n]+$/, '');
       shellArgs = ['-l', '-i', '-c', cmd];
     } else {
       shellArgs = ['-l'];

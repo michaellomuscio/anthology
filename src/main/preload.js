@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('station', {
   ptyExists: (id) => ipcRenderer.invoke('pty:exists', id),
   setMaskSecrets: (id, enabled) => ipcRenderer.invoke('pty:set-mask-secrets', { id, enabled }),
   getMaskState: (id) => ipcRenderer.invoke('pty:get-mask-state', id),
+  submitPrompt: (id, text) => ipcRenderer.invoke('pty:submit-prompt', { id, text }),
   mcpInfo: () => ipcRenderer.invoke('mcp:info'),
 
   // Per-session scrollback persistence

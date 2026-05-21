@@ -10,6 +10,10 @@ export default function SpawnModal({ onClose, onSpawn }) {
   const [tag, setTag] = useState(TAGS[0]);
   const [recents, setRecents] = useState([]);
   const [pmMode, setPmMode] = useState(false);
+  // 'claude' is the default. 'codex' execs the OpenAI Codex CLI instead
+  // (user must `brew install codex` or equivalent). PM mode forces claude
+  // because the MCP-tools attach is Claude-specific in v1.
+  const [agentTool, setAgentTool] = useState('claude');
 
   useEffect(() => {
     (async () => {
@@ -33,6 +37,7 @@ export default function SpawnModal({ onClose, onSpawn }) {
       color,
       tag,
       pm: pmMode,
+      agentTool: pmMode ? 'claude' : agentTool,
     });
   };
 
@@ -60,6 +65,33 @@ export default function SpawnModal({ onClose, onSpawn }) {
                 Use it to coordinate complex multi-session work.
               </div>
             </div>
+          </div>
+
+          <div className="field">
+            <div className="field-label">Agent</div>
+            <div className="agent-picker">
+              <button
+                type="button"
+                className={`agent-pill agent-pill--claude ${agentTool === 'claude' ? 'selected' : ''}`}
+                onClick={() => setAgentTool('claude')}
+              >
+                <span className="agent-pill-mark">✱</span>
+                Claude Code
+              </button>
+              <button
+                type="button"
+                className={`agent-pill agent-pill--codex ${agentTool === 'codex' ? 'selected' : ''}`}
+                onClick={() => setAgentTool('codex')}
+                disabled={pmMode}
+                title={pmMode ? 'Project Manager mode is Claude-only in v1' : 'Spawn the OpenAI Codex CLI instead'}
+              >
+                <span className="agent-pill-mark">⌬</span>
+                Codex
+              </button>
+            </div>
+            {pmMode && (
+              <div className="field-hint">PM mode uses Claude — MCP-tools attach is Claude-specific.</div>
+            )}
           </div>
 
           <div className="field">
@@ -128,7 +160,9 @@ export default function SpawnModal({ onClose, onSpawn }) {
           <span className="hint">
             {pmMode
               ? 'Spawns claude with --mcp-config · station_* tools available'
-              : 'Spawns a real PTY · runs `claude` in the chosen directory'}
+              : agentTool === 'codex'
+                ? 'Spawns a real PTY · runs `codex` in the chosen directory'
+                : 'Spawns a real PTY · runs `claude` in the chosen directory'}
           </span>
           <div className="actions">
             <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
