@@ -337,6 +337,15 @@ app.whenReady().then(async () => {
         try { ptyManager.submitPrompt(id, text); } catch (_) {}
       }, delayMs);
     },
+    // Called when the bridge kills a session — same effect as the renderer's
+    // own delete-session flow: remove the session record, dispose the cached
+    // terminal in the renderer, fan-out so all clients drop it. Without this,
+    // the iOS kill button would only stop the PTY while the row lingered.
+    notifyKilled: (id) => {
+      try { sessionsStore.remove(id); } catch (_) {}
+      sendToRendererOnly('session:killed', { id });
+      if (bridgeServer) bridgeServer.handleSessionKilled(id);
+    },
     onClientChange: (count) => {
       sendToRendererOnly('bridge:clients', { count });
       if (count > 0 && powerSaveBlockerId === null) {

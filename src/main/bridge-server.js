@@ -53,6 +53,7 @@ class BridgeServer {
     groupsStore = null,
     createPmSession = null,
     submitPromptDelayed = null,
+    notifyKilled = null,
   }) {
     this.ptyManager = ptyManager;
     this.sessionsStore = sessionsStore;
@@ -70,6 +71,7 @@ class BridgeServer {
     this.groupsStore = groupsStore;
     this.createPmSession = createPmSession;
     this.submitPromptDelayed = submitPromptDelayed;
+    this.notifyKilled = notifyKilled;
 
     this.clients = new Set();           // connected WS clients
     this.pendingData = new Map();       // sessionId -> buffered data string
@@ -586,9 +588,13 @@ class BridgeServer {
         const sid = safeId(msg.sessionId);
         if (!sid) return this._sendErr(client, id, 'bad_request', 'Invalid sessionId');
         const killed = this.ptyManager.kill(sid);
-        // Note: not removing from sessionsStore — matches renderer behavior of leaving
-        // a "kill banner" on the sidebar so the user can restart.
-        if (killed) this.handleSessionKilled(sid);
+        // Full delete — matches the renderer's own kill flow + iOS user
+        // expectation that "kill" removes the row entirely (there's no
+        // restart UI on the phone). notifyKilled removes the record from
+        // sessionsStore, drops the cached terminal in the renderer, and
+        // fans the session_killed event to all bridge clients.
+        if (this.notifyKilled) this.notifyKilled(sid);
+        else if (killed) this.handleSessionKilled(sid);  // fallback for unwired test setups
         this._audit({ event: 'kill', tokenId: client.tokenId, sessionId: sid });
         return this._send(client, { type: 'ack', id, result: { ok: !!killed } });
       }
