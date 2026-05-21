@@ -2218,6 +2218,34 @@ button { font-family: inherit; cursor: pointer; }
   margin-top: 6px;
 }
 
+/* ============== Tag chips (free-text tag + recent suggestions) ============== */
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.tag-chip {
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  color: var(--app-fg-2);
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.tag-chip:hover {
+  color: var(--app-fg-1);
+  border-color: var(--app-border-2);
+}
+.tag-chip.active {
+  background: var(--app-accent-soft);
+  border-color: var(--app-accent);
+  color: var(--app-accent);
+}
+
 /* ============== Rich Input modal (Ctrl+G) ============== */
 .rich-overlay { padding-top: 10vh; }
 .rich-modal {

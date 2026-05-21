@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import Sidebar from './components/Sidebar.jsx';
 import TopBar from './components/TopBar.jsx';
 import SessionView from './components/SessionView.jsx';
@@ -293,6 +293,24 @@ export default function App() {
     setView('session');
   };
 
+  // Recent tags derived from current sessions, newest-first, deduped, capped.
+  // No more fixed coding-only vocabulary — tag can be any free-text label
+  // (cds-emails, marketing, research, etc.). Spawn picks up these recents
+  // as one-tap chips.
+  const recentTags = useMemo(() => {
+    const seen = new Map(); // tag -> latest createdAt seen for it
+    for (const s of sessions) {
+      const t = String(s.tag || '').trim();
+      if (!t) continue;
+      const ts = s.createdAt || 0;
+      if (ts >= (seen.get(t) || 0)) seen.set(t, ts);
+    }
+    return [...seen.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([t]) => t)
+      .slice(0, 10);
+  }, [sessions]);
+
   const handleSpawn = async ({ name, cwd, color, tag, pm, agentTool, personaName }) => {
     const id = uid();
     const session = {
@@ -489,6 +507,7 @@ export default function App() {
         <SpawnModal
           onClose={() => setShowSpawn(false)}
           onSpawn={handleSpawn}
+          recentTags={recentTags}
         />
       )}
 

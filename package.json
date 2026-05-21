@@ -1,6 +1,6 @@
 {
   "name": "anthology",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A Mac app for managing multiple Claude Code sessions",
   "main": "src/main/main.js",
   "type": "commonjs",

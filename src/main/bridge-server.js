@@ -49,6 +49,10 @@ class BridgeServer {
     onClientChange = () => {},
     onAudit = () => {},
     auditPath = null,
+    workerStore = null,
+    groupsStore = null,
+    createPmSession = null,
+    submitPromptDelayed = null,
   }) {
     this.ptyManager = ptyManager;
     this.sessionsStore = sessionsStore;
@@ -62,6 +66,10 @@ class BridgeServer {
     this.onClientChange = onClientChange;
     this.onAudit = onAudit;
     this.auditPath = auditPath;
+    this.workerStore = workerStore;
+    this.groupsStore = groupsStore;
+    this.createPmSession = createPmSession;
+    this.submitPromptDelayed = submitPromptDelayed;
 
     this.clients = new Set();           // connected WS clients
     this.pendingData = new Map();       // sessionId -> buffered data string
@@ -137,6 +145,12 @@ class BridgeServer {
 
   handleSessionMeta(session) {
     this._broadcast({ type: 'session_meta', session: this._toMeta(session) });
+  }
+
+  /// Fan-out for group CRUD so any other iOS client sees the new bench shape.
+  handleGroupsChanged() {
+    if (!this.groupsStore) return;
+    this._broadcast({ type: 'groups_changed', groups: this.groupsStore.list() });
   }
 
   handleScheduleFired(payload) {
@@ -456,22 +470,116 @@ class BridgeServer {
         const color = typeof msg.color === 'string' ? msg.color : '#7B2FBE';
         const tag = typeof msg.tag === 'string' ? msg.tag : null;
         const runClaude = msg.runClaude !== false;
+        const isPm = msg.pm === true;
+        const agentTool = msg.agentTool === 'codex' ? 'codex' : 'claude';
+        const personaName = typeof msg.personaName === 'string' && msg.personaName.trim()
+          ? msg.personaName.trim() : null;
+        const groupId = typeof msg.groupId === 'string' && msg.groupId.trim()
+          ? msg.groupId.trim() : null;
         const sid = newSessionId('s');
         const session = {
-          id: sid, name, cwd, color, tag, pinned: false,
-          createdAt: Date.now(), createdBy: 'bridge',
+          id: sid, name,
+          cwd,
+          color: isPm ? '#7B2FBE' : color,
+          tag: isPm ? (tag || 'pm') : tag,
+          pinned: isPm,
+          isPM: isPm,
+          agentTool: isPm ? 'claude' : agentTool,
+          personaName: isPm ? null : personaName,
+          groupId,
+          createdAt: Date.now(),
+          createdBy: 'bridge',
         };
         this.sessionsStore.upsert(session);
         try {
-          this.ptyManager.create({ id: sid, cwd, runClaude });
+          if (isPm) {
+            if (!this.createPmSession) {
+              throw new Error('PM spawn not available (createPmSession not wired)');
+            }
+            this.createPmSession({ id: sid, cwd });
+          } else {
+            this.ptyManager.create({ id: sid, cwd, runClaude, agentTool });
+            // Worker persona injection — bracket-paste the persona's body after
+            // claude initializes. Same 4.5s the renderer + MCP tools use.
+            if (personaName && this.workerStore) {
+              const worker = this.workerStore.get(personaName);
+              if (worker && worker.body && this.submitPromptDelayed) {
+                const intro = `You are now embodying the worker persona "${worker.frontmatter?.name || personaName}". From this point on, stay in this role for the rest of the conversation. Here is your full role definition:\n\n${worker.body}\n\nAcknowledge briefly by naming your role in one sentence, then wait for my next message.`;
+                this.submitPromptDelayed(sid, intro, 4500);
+              }
+            }
+          }
         } catch (e) {
           this.sessionsStore.remove(sid);
           return this._sendErr(client, id, 'internal', e.message);
         }
         // Fan-out so other connected clients (and the renderer, via main.js) know.
         this.handleSessionCreated(session);
-        this._audit({ event: 'spawn', tokenId: client.tokenId, sessionId: sid, cwd });
+        this._audit({ event: 'spawn', tokenId: client.tokenId, sessionId: sid, cwd, isPm, personaName });
         return this._send(client, { type: 'ack', id, result: { session: this._toMeta(session) } });
+      }
+
+      case 'list_workers': {
+        if (!this.workerStore) {
+          return this._send(client, { type: 'ack', id, result: { workers: [] } });
+        }
+        const all = this.workerStore.list();
+        const out = all.map((w) => ({
+          name: (w.name || '').replace(/^worker-/, ''),
+          fullName: w.name,
+          description: w.description || '',
+          category: w.category || 'other',
+          emoji: w.emoji || '',
+          color: w.color || '',
+        }));
+        return this._send(client, { type: 'ack', id, result: { workers: out } });
+      }
+
+      case 'list_groups': {
+        if (!this.groupsStore) {
+          return this._send(client, { type: 'ack', id, result: { groups: [] } });
+        }
+        return this._send(client, { type: 'ack', id, result: { groups: this.groupsStore.list() } });
+      }
+
+      case 'upsert_group': {
+        if (!this.groupsStore) return this._sendErr(client, id, 'unavailable', 'groups not available');
+        const g = msg.group;
+        if (!g || !g.id) return this._sendErr(client, id, 'bad_request', 'group.id required');
+        const out = this.groupsStore.upsert(g);
+        this.handleGroupsChanged();
+        this._audit({ event: 'group_upsert', tokenId: client.tokenId, groupId: g.id });
+        return this._send(client, { type: 'ack', id, result: { group: out } });
+      }
+
+      case 'delete_group': {
+        if (!this.groupsStore) return this._sendErr(client, id, 'unavailable', 'groups not available');
+        const gid = typeof msg.id === 'string' ? msg.id : null;
+        if (!gid) return this._sendErr(client, id, 'bad_request', 'id required');
+        // Same semantics as the IPC handler: clear groupId from any session that
+        // referenced this group so the iOS UI doesn't render orphans.
+        const affected = this.sessionsStore.list().filter((s) => s.groupId === gid);
+        for (const s of affected) {
+          const updated = this.sessionsStore.upsert({ ...s, groupId: null });
+          this.handleSessionMeta(updated || s);
+        }
+        this.groupsStore.remove(gid);
+        this.handleGroupsChanged();
+        this._audit({ event: 'group_delete', tokenId: client.tokenId, groupId: gid });
+        return this._send(client, { type: 'ack', id, result: { ok: true, affected: affected.length } });
+      }
+
+      case 'set_session_group': {
+        const sid = safeId(msg.sessionId);
+        if (!sid) return this._sendErr(client, id, 'bad_request', 'sessionId required');
+        const existing = this.sessionsStore.list().find((s) => s.id === sid);
+        if (!existing) return this._sendErr(client, id, 'not_found', 'session not found');
+        const groupId = typeof msg.groupId === 'string' && msg.groupId.trim()
+          ? msg.groupId.trim() : null;
+        const updated = this.sessionsStore.upsert({ ...existing, groupId });
+        this.handleSessionMeta(updated || existing);
+        this._audit({ event: 'set_session_group', tokenId: client.tokenId, sessionId: sid, groupId });
+        return this._send(client, { type: 'ack', id, result: { session: this._toMeta(updated) } });
       }
 
       case 'kill': {
@@ -534,6 +642,11 @@ class BridgeServer {
       alive: this.ptyManager.exists(session.id),
       createdAt: session.createdAt || null,
       spawnedBySchedule: session.spawnedBySchedule || null,
+      // v0.7+ fields — iOS clients ≥ 0.7 read these; older clients ignore them.
+      isPM: !!session.isPM,
+      agentTool: session.agentTool || null,
+      personaName: session.personaName || null,
+      groupId: session.groupId || null,
     };
   }
 
