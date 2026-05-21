@@ -13,6 +13,8 @@ const BridgeTokens = require('./bridge-tokens');
 const BridgeConfig = require('./bridge-config');
 const PushDispatcher = require('./push-dispatcher');
 const CloudflaredManager = require('./cloudflared-manager');
+const WorkerStore = require('./worker-store');
+const STARTER_WORKERS = require('./starter-workers');
 
 // Reject ids that could escape userData via path traversal or null bytes.
 // Mirror BufferStore.pathFor's character set so all on-disk artifacts share
@@ -86,6 +88,7 @@ let bridgeConfig = null;
 let pushDispatcher = null;
 let bridgeInfo = null; // { port }
 let cloudflaredManager = null;
+let workerStore = null;
 let powerSaveBlockerId = null;
 
 // Standard macOS application menu, but with the leftmost label forced to
@@ -258,11 +261,17 @@ app.whenReady().then(async () => {
   PtyManager.setAppVersion(app.getVersion());
   ptyManager = new PtyManager({ sendToRenderer });
 
+  // Worker bench — lives in ~/.claude/agents/worker-*.md so workers created in
+  // Anthology are usable from any Claude Code instance (terminal too). Built
+  // here (before buildTools) so the MCP station_list_workers tool can use it.
+  workerStore = new WorkerStore();
+
   // Start the MCP HTTP server with station tools so PM sessions can manage workers.
   const tools = buildTools({
     ptyManager,
     sessionsStore,
     broadcast: sendToRenderer,
+    workerStore,
   });
   mcpServer = new McpHttpServer({ tools });
   try {
@@ -518,6 +527,15 @@ function registerIpcHandlers() {
     return true;
   });
 
+  // -------------------- Worker bench --------------------
+  ipcMain.handle('workers:list', () => workerStore.list());
+  ipcMain.handle('workers:save', (_e, worker) => workerStore.save(worker));
+  ipcMain.handle('workers:delete', (_e, filename) => workerStore.remove(filename));
+  ipcMain.handle('workers:install-starter-pack', (_e, opts) => {
+    return workerStore.installStarterPack(STARTER_WORKERS, opts || {});
+  });
+  ipcMain.handle('workers:get', (_e, name) => workerStore.get(name));
+
   // -------------------- PTY management --------------------
   // Public pty:create deliberately drops `command` — only the privileged
   // pty:create-pm path constructs commands (with controlled shell quoting).
@@ -527,7 +545,7 @@ function registerIpcHandlers() {
     if (!id) throw new Error('Invalid session id');
     const cols = Math.max(2, Math.min(1000, Number(opts?.cols) || 100));
     const rows = Math.max(2, Math.min(1000, Number(opts?.rows) || 30));
-    return ptyManager.create({
+    const result = ptyManager.create({
       id,
       cwd: typeof opts?.cwd === 'string' ? opts.cwd : null,
       cols,
@@ -538,6 +556,20 @@ function registerIpcHandlers() {
       // which always uses claude (MCP-tools attach is Claude-specific in v1).
       agentTool: opts?.agentTool === 'codex' ? 'codex' : 'claude',
     });
+    // Spawn-as-worker: after the agent CLI initializes, inject the worker's
+    // system prompt as the first paste so the conversation runs in-persona.
+    // We use the same ~4.5s delay the scheduler uses for prompt submission —
+    // long enough for claude's rc + login + banner to finish.
+    if (opts?.personaName && workerStore) {
+      const worker = workerStore.get(opts.personaName);
+      if (worker && worker.body) {
+        const intro = `You are now embodying the worker persona "${worker.frontmatter?.name || opts.personaName}". From this point on, stay in this role for the rest of the conversation. Here is your full role definition:\n\n${worker.body}\n\nAcknowledge briefly by naming your role in one sentence, then wait for my next message.`;
+        setTimeout(() => {
+          try { ptyManager.submitPrompt(id, intro); } catch (_) {}
+        }, 4500);
+      }
+    }
+    return result;
   });
   ipcMain.handle('pty:write', (_e, { id, data }) => {
     const sid = safeId(id);

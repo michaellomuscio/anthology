@@ -17,7 +17,7 @@ function pickColor() {
   return SESSION_COLORS[Math.floor(Math.random() * SESSION_COLORS.length)];
 }
 
-function buildTools({ ptyManager, sessionsStore, broadcast }) {
+function buildTools({ ptyManager, sessionsStore, broadcast, workerStore }) {
   return {
     station_list_sessions: {
       description:
@@ -332,6 +332,123 @@ function buildTools({ ptyManager, sessionsStore, broadcast }) {
         broadcast('session:killed', { id: session_id });
         return {
           content: [{ type: 'text', text: `Killed session ${session_id}.` }],
+        };
+      },
+    },
+
+    station_list_workers: {
+      description:
+        "List the available worker personas (specialist agents Anthology can spawn into a session). Returns name, category, description, and emoji for each. Workers are .md files in ~/.claude/agents/ with a `worker-` prefix. Use this to know what specialist personas you can dispatch via station_spawn_as_worker, or to pick a sensible persona for a task before spawning.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          category: {
+            type: 'string',
+            description: 'Optional category filter — one of: engineering, design, content, analytics, business, research, other.',
+          },
+        },
+        required: [],
+      },
+      handler: async ({ category } = {}) => {
+        if (!workerStore) {
+          return { content: [{ type: 'text', text: 'No worker store available — Anthology may be running in a degraded mode.' }] };
+        }
+        const all = workerStore.list();
+        const filtered = category
+          ? all.filter((w) => (w.category || 'other').toLowerCase() === String(category).toLowerCase())
+          : all;
+        const summary = filtered.map((w) => ({
+          name: (w.name || '').replace(/^worker-/, ''),
+          full_name: w.name,
+          category: w.category || 'other',
+          description: w.description || '',
+          emoji: w.emoji || '',
+        }));
+        return {
+          content: [
+            {
+              type: 'text',
+              text:
+                `${filtered.length} worker${filtered.length === 1 ? '' : 's'} available` +
+                (category ? ` in category=${category}` : '') +
+                `:\n\n` +
+                JSON.stringify(summary, null, 2),
+            },
+          ],
+        };
+      },
+    },
+
+    station_spawn_as_worker: {
+      description:
+        "Spawn a NEW Claude Code session AND inject a worker persona's system prompt so the conversation runs in that role. Returns the new session id. Use this when you want a specialist (copywriter, security-engineer, statistician, etc.) working on a task long-term — different from `Task` which is a short-lived subagent dispatch.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          worker_name: {
+            type: 'string',
+            description: "Name of the worker (with or without the `worker-` prefix). Call station_list_workers first if you don't know what's available.",
+          },
+          name: {
+            type: 'string',
+            description: 'Short label for the new session (shown in the sidebar). E.g. "launch copy", "audit auth surface".',
+          },
+          cwd: {
+            type: 'string',
+            description: 'Absolute path to the working directory the session should run in.',
+          },
+          initial_prompt: {
+            type: 'string',
+            description: 'Optional second message sent after the persona is loaded. Use this to give the worker its first concrete task.',
+          },
+        },
+        required: ['worker_name', 'name', 'cwd'],
+      },
+      handler: async ({ worker_name, name, cwd, initial_prompt }) => {
+        if (!workerStore) throw new Error('worker store not available');
+        const worker = workerStore.get(worker_name);
+        if (!worker) {
+          throw new Error(`Worker "${worker_name}" not found. Call station_list_workers to see what's available.`);
+        }
+        const id = uid();
+        const personaShortName = (worker.name || worker_name).replace(/^worker-/, '');
+        const session = {
+          id,
+          name: String(name).slice(0, 80),
+          cwd,
+          tag: worker.frontmatter?.category || 'worker',
+          color: worker.frontmatter?.color || pickColor(),
+          pinned: false,
+          createdAt: Date.now(),
+          spawnedByPM: true,
+          personaName: personaShortName,
+          agentTool: 'claude',
+        };
+        sessionsStore.upsert(session);
+        ptyManager.create({ id, cwd, runClaude: true });
+        broadcast('session:created', session);
+
+        // Inject the persona after the agent CLI has had time to boot.
+        const intro = `You are now embodying the worker persona "${worker.frontmatter?.name || personaShortName}". From this point on, stay in this role for the rest of the conversation. Here is your full role definition:\n\n${worker.body}\n\nAcknowledge briefly by naming your role in one sentence, then wait for my next message.`;
+        setTimeout(() => {
+          try { ptyManager.submitPrompt(id, intro); } catch (_) {}
+        }, 4500);
+
+        if (initial_prompt && typeof initial_prompt === 'string' && initial_prompt.trim()) {
+          // Hold the task message until after the persona has been loaded so
+          // the worker has its role context before it sees the work.
+          setTimeout(() => {
+            try { ptyManager.submitPrompt(id, initial_prompt); } catch (_) {}
+          }, 12000);
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Spawned worker session id=${id} as "${personaShortName}" — name="${session.name}" cwd=${cwd}. ${initial_prompt ? 'Initial task will be sent after the persona loads (~12s).' : 'Use station_send_to_session to give it its first task.'}`,
+            },
+          ],
         };
       },
     },

@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function TopBar({ view, setView, theme, toggleTheme, sessions, statuses, openCmdK, openHelp, openPhone, phoneClientCount = 0 }) {
+export default function TopBar({ view, setView, theme, toggleTheme, sessions, statuses, openCmdK, openHelp, openPhone, openWorkers, phoneClientCount = 0 }) {
   const counts = sessions.reduce(
     (acc, s) => {
       const st = statuses[s.id] || 'idle';
@@ -38,6 +38,18 @@ export default function TopBar({ view, setView, theme, toggleTheme, sessions, st
 
       <button className="topbar-icon-btn" onClick={openCmdK} title="Command palette (⌘K)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+      </button>
+      <button
+        className="topbar-icon-btn"
+        onClick={openWorkers}
+        title="Workers (your bench of agent personas)"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 2c2 2 2 5 0 7-2-2-2-5 0-7z" />
+          <path d="M5 13c2-1 5-1 7 0M12 13c2-1 5-1 7 0" />
+          <path d="M12 9v13" />
+          <path d="M9 22h6" />
+        </svg>
       </button>
       <button
         className={`topbar-icon-btn ${phoneClientCount > 0 ? 'has-clients' : ''}`}

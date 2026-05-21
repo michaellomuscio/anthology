@@ -134,4 +134,11 @@ contextBridge.exposeInMainWorld('station', {
     ipcRenderer.on('tunnel:status', listener);
     return () => ipcRenderer.removeListener('tunnel:status', listener);
   },
+
+  // Worker bench — ~/.claude/agents/worker-*.md
+  listWorkers: () => ipcRenderer.invoke('workers:list'),
+  saveWorker: (w) => ipcRenderer.invoke('workers:save', w),
+  deleteWorker: (filename) => ipcRenderer.invoke('workers:delete', filename),
+  installWorkerStarterPack: (opts) => ipcRenderer.invoke('workers:install-starter-pack', opts || {}),
+  getWorker: (name) => ipcRenderer.invoke('workers:get', name),
 });

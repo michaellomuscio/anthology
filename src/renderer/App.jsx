@@ -7,6 +7,7 @@ import SpawnModal from './components/SpawnModal.jsx';
 import CommandPalette from './components/CommandPalette.jsx';
 import SlashPalette from './components/SlashPalette.jsx';
 import RichInputModal from './components/RichInputModal.jsx';
+import Workers from './components/Workers.jsx';
 import Schedules from './components/Schedules.jsx';
 import OnboardingTour from './components/OnboardingTour.jsx';
 import HelpGuide from './components/HelpGuide.jsx';
@@ -40,6 +41,7 @@ export default function App() {
   const [showRich, setShowRich] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
+  const [showWorkers, setShowWorkers] = useState(false);
   const [phoneClientCount, setPhoneClientCount] = useState(0);
   const [showTour, setShowTour] = useState(() => {
     try { return !localStorage.getItem(ONBOARDED_KEY); } catch (_) { return false; }
@@ -291,7 +293,7 @@ export default function App() {
     setView('session');
   };
 
-  const handleSpawn = async ({ name, cwd, color, tag, pm, agentTool }) => {
+  const handleSpawn = async ({ name, cwd, color, tag, pm, agentTool, personaName }) => {
     const id = uid();
     const session = {
       id,
@@ -304,6 +306,7 @@ export default function App() {
       // Default 'claude' when unspecified — matches the pre-Codex behavior so
       // existing sessions don't suddenly try to spawn a missing binary.
       agentTool: pm ? 'claude' : (agentTool || 'claude'),
+      personaName: pm ? '' : (personaName || ''),
       createdAt: Date.now(),
     };
     setSessions((prev) => [...prev, session]);
@@ -452,6 +455,7 @@ export default function App() {
           openCmdK={() => setShowCmdK(true)}
           openHelp={() => setShowHelp(true)}
           openPhone={() => setShowPhone(true)}
+          openWorkers={() => setShowWorkers(true)}
           phoneClientCount={phoneClientCount}
         />
 
@@ -521,6 +525,10 @@ export default function App() {
 
       {showPhone && (
         <PhonePairing onClose={() => setShowPhone(false)} />
+      )}
+
+      {showWorkers && (
+        <Workers onClose={() => setShowWorkers(false)} />
       )}
 
       {showTour && <OnboardingTour onClose={closeTour} />}

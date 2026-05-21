@@ -2321,6 +2321,247 @@ button { font-family: inherit; cursor: pointer; }
   50% { box-shadow: 0 0 0 5px rgba(232, 99, 79, 0); }
 }
 
+/* ============== Workers (agent bench) ============== */
+.workers-modal {
+  width: 880px;
+  max-width: 94vw;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+.workers-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.workers-header code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--app-surface-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.workers-header-actions { flex-shrink: 0; }
+.workers-header-actions .btn-primary {
+  background: var(--app-accent);
+  color: var(--ll-white);
+  border: 1px solid var(--app-accent);
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.workers-header-actions .btn-primary:hover { background: var(--ll-purple-dark, #5A1F8E); }
+
+.workers-empty {
+  flex: 1;
+  padding: 40px 30px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.workers-empty-emoji { font-size: 48px; line-height: 1; }
+.workers-empty h3 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
+}
+.workers-empty p {
+  max-width: 540px;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--app-fg-2);
+  line-height: 1.6;
+}
+.workers-empty code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--app-surface-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.workers-empty-actions { display: flex; gap: 10px; margin-top: 8px; }
+.workers-empty-actions button {
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  color: var(--app-fg-1);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+.workers-empty-actions button:hover { background: var(--app-surface-3); }
+.workers-empty-actions .btn-primary {
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+  color: var(--ll-white);
+}
+.workers-empty-actions .btn-primary:hover { background: var(--ll-purple-dark, #5A1F8E); }
+
+.workers-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--app-border);
+}
+.workers-search {
+  width: 100%;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--app-fg-1);
+  outline: none;
+}
+.workers-search:focus { border-color: var(--app-accent); }
+.workers-cat-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.workers-cat-chip {
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  color: var(--app-fg-2);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.workers-cat-chip:hover { color: var(--app-fg-1); }
+.workers-cat-chip.active {
+  background: var(--cat-color, var(--app-accent));
+  border-color: var(--cat-color, var(--app-accent));
+  color: var(--ll-white);
+}
+.workers-cat-chip .count {
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.workers-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 20px 20px;
+}
+.workers-section { margin-bottom: 18px; }
+.workers-section-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.workers-section-label .count {
+  background: var(--app-surface-2);
+  color: var(--app-fg-2);
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 9px;
+}
+.workers-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.worker-card {
+  text-align: left;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all var(--dur-fast) var(--ease-out);
+  font-family: var(--font-body);
+}
+.worker-card:hover {
+  background: var(--app-surface-3);
+  transform: translateY(-1px);
+}
+.worker-card-head { display: flex; align-items: center; gap: 8px; }
+.worker-card-emoji {
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.worker-card-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--app-fg-1);
+  line-height: 1.3;
+}
+.worker-card-desc {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--app-fg-2);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.workers-empty-search {
+  padding: 40px 20px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--app-fg-3);
+}
+
+/* Worker form (edit mode) */
+.worker-form { display: flex; flex-direction: column; gap: 12px; }
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 80px;
+  gap: 10px;
+}
+.field-label-hint {
+  color: var(--app-fg-3);
+  font-weight: 400;
+  font-size: 9px;
+  margin-left: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.worker-body-textarea {
+  width: 100%;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--app-fg-1);
+  outline: none;
+  resize: vertical;
+  min-height: 240px;
+}
+.worker-body-textarea:focus { border-color: var(--app-accent); }
+
 /* ============== Cloudflare Tunnel section in PhonePairing ============== */
 .phone-pair-tunnel {
   margin-top: 14px;
