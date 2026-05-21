@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { SESSION_COLORS, TAGS } from '../constants.js';
 
 const station = window.station;
+
+function stripWorkerPrefix(name) { return (name || '').replace(/^worker-/, ''); }
 
 export default function SpawnModal({ onClose, onSpawn }) {
   const [name, setName] = useState('');
@@ -14,6 +16,11 @@ export default function SpawnModal({ onClose, onSpawn }) {
   // (user must `brew install codex` or equivalent). PM mode forces claude
   // because the MCP-tools attach is Claude-specific in v1.
   const [agentTool, setAgentTool] = useState('claude');
+  // Optional worker persona — when set, after claude/codex starts the
+  // worker's system prompt is bracket-pasted as the first message so
+  // the conversation runs in-persona.
+  const [personaName, setPersonaName] = useState('');
+  const [workers, setWorkers] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -21,8 +28,24 @@ export default function SpawnModal({ onClose, onSpawn }) {
       setCwd(home);
       const list = await station.listRecentDirs();
       setRecents(list || []);
+      if (station.listWorkers) {
+        try {
+          const ws = await station.listWorkers();
+          setWorkers(ws || []);
+        } catch (_) {}
+      }
     })();
   }, []);
+
+  const workersByCategory = useMemo(() => {
+    const map = new Map();
+    for (const w of workers) {
+      const cat = w.category || 'other';
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat).push(w);
+    }
+    return map;
+  }, [workers]);
 
   const onPick = async () => {
     const dir = await station.pickDirectory();
@@ -38,6 +61,9 @@ export default function SpawnModal({ onClose, onSpawn }) {
       tag,
       pm: pmMode,
       agentTool: pmMode ? 'claude' : agentTool,
+      // Persona injection happens in the main process after the agent CLI
+      // initializes — see pty:create handler.
+      personaName: pmMode ? '' : personaName,
     });
   };
 
@@ -93,6 +119,29 @@ export default function SpawnModal({ onClose, onSpawn }) {
               <div className="field-hint">PM mode uses Claude — MCP-tools attach is Claude-specific.</div>
             )}
           </div>
+
+          {!pmMode && workers.length > 0 && (
+            <div className="field">
+              <div className="field-label">
+                Persona <span className="field-label-hint">(optional — runs the session as a worker)</span>
+              </div>
+              <select
+                value={personaName}
+                onChange={(e) => setPersonaName(e.target.value)}
+              >
+                <option value="">— none (default Claude/Codex) —</option>
+                {Array.from(workersByCategory.entries()).map(([cat, list]) => (
+                  <optgroup key={cat} label={cat.charAt(0).toUpperCase() + cat.slice(1)}>
+                    {list.map((w) => (
+                      <option key={w.filename} value={stripWorkerPrefix(w.name || w.filename.replace(/\.md$/, ''))}>
+                        {(w.emoji || '🐝') + ' ' + stripWorkerPrefix(w.name || '')}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="field">
             <div className="field-label">Name</div>
