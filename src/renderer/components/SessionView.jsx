@@ -79,6 +79,25 @@ function GaugeIcon() {
   );
 }
 
+function PencilSquareIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 6h11M4 12h11M4 18h7" />
+      <path d="M18 16l2 2-5 5h-2v-2l5-5z" />
+    </svg>
+  );
+}
+
+function MicIcon({ active }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0" />
+      <path d="M12 18v3" />
+    </svg>
+  );
+}
+
 // Send a slash command to a session as if the user typed it. `withArgs: true`
 // leaves the line unterminated so the user can finish the value live (used for
 // /effort, /model). `withArgs: false` sends \r so claude executes immediately.
@@ -97,10 +116,55 @@ function formatIdle(ms) {
   return Math.floor(sec / 3600) + 'h';
 }
 
-export default function SessionView({ session, status, lastActivity, redactionCount = 0, onKill, onPin, onRename, onToggleMaskSecrets, onOpenSlashPalette }) {
+export default function SessionView({ session, status, lastActivity, redactionCount = 0, onKill, onPin, onRename, onToggleMaskSecrets, onOpenSlashPalette, onOpenRichInput }) {
   const maskOn = session.maskSecrets !== false;
   const [effortMenuOpen, setEffortMenuOpen] = useState(false);
   const effortLevels = ['low', 'medium', 'high', 'max'];
+  const [voiceRecording, setVoiceRecording] = React.useState(false);
+  const [voiceUnsupported, setVoiceUnsupported] = React.useState(false);
+  const voiceRecognitionRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) setVoiceUnsupported(true);
+  }, []);
+
+  const startVoice = React.useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.lang = 'en-US';
+    let written = 0;
+    rec.onresult = (e) => {
+      for (let i = written; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (!r.isFinal) continue;
+        const piece = r[0]?.transcript || '';
+        if (piece) {
+          try { station.writePty(session.id, piece + ' '); } catch (_) {}
+        }
+        written = i + 1;
+      }
+    };
+    rec.onerror = () => setVoiceRecording(false);
+    rec.onend = () => setVoiceRecording(false);
+    try {
+      rec.start();
+      voiceRecognitionRef.current = rec;
+      setVoiceRecording(true);
+    } catch (_) { setVoiceRecording(false); }
+  }, [session.id]);
+
+  const stopVoice = React.useCallback(() => {
+    try { voiceRecognitionRef.current?.stop(); } catch (_) {}
+    voiceRecognitionRef.current = null;
+    setVoiceRecording(false);
+  }, []);
+
+  // Tear down the recorder if the session unmounts mid-recording.
+  React.useEffect(() => () => { try { voiceRecognitionRef.current?.stop(); } catch (_) {} }, []);
   const repoLabel = useMemo(() => {
     if (!session.cwd) return '';
     const parts = session.cwd.split('/').filter(Boolean);
@@ -259,6 +323,30 @@ export default function SessionView({ session, status, lastActivity, redactionCo
               onClick={() => sendSlash(session.id, 'clear')}
             >
               <span>Clear</span>
+            </button>
+
+            <button
+              type="button"
+              className="qb-btn"
+              title="Multi-line composer (^G)"
+              onClick={() => onOpenRichInput?.()}
+            >
+              <PencilSquareIcon />
+              <span>Rich input</span>
+              <span className="kbd-pill">^G</span>
+            </button>
+
+            <button
+              type="button"
+              className={`qb-btn ${voiceRecording ? 'recording' : ''}`}
+              title={voiceUnsupported
+                ? 'Speech recognition not available in this build'
+                : voiceRecording ? 'Stop dictation' : 'Dictate into the session'}
+              onClick={() => (voiceRecording ? stopVoice() : startVoice())}
+              disabled={voiceUnsupported}
+            >
+              <MicIcon active={voiceRecording} />
+              <span>{voiceRecording ? 'Listening…' : 'Voice'}</span>
             </button>
           </div>
         </div>

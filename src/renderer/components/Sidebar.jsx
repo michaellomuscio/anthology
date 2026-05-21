@@ -73,6 +73,17 @@ function repoLabel(cwd) {
   return parts.slice(-1)[0] || cwd;
 }
 
+function AgentBadge({ tool }) {
+  if (!tool) return null;
+  const isCodex = tool === 'codex';
+  return (
+    <span className={`agent-badge agent-badge--${isCodex ? 'codex' : 'claude'}`} title={isCodex ? 'OpenAI Codex' : 'Claude Code'}>
+      <span className="agent-badge-mark">{isCodex ? '⌬' : '✱'}</span>
+      {isCodex ? 'codex' : 'claude'}
+    </span>
+  );
+}
+
 function SessionRow({ session, status, unread, index, active, onClick, onDragStart, onDragEnd }) {
   return (
     <div
@@ -88,6 +99,7 @@ function SessionRow({ session, status, unread, index, active, onClick, onDragSta
           <div className={`status-dot ${status}`} />
           <span className="name">{session.name}</span>
           {session.isPM && <span className="pm-badge">PM</span>}
+          {!session.isPM && <AgentBadge tool={session.agentTool} />}
           {session.pinned && <PinIcon />}
         </div>
         <div className="session-row-meta">

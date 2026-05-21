@@ -142,7 +142,7 @@ function installFlushHandler() {
 }
 installFlushHandler();
 
-async function ensureSession(sessionId, cwd, isPM, wasExited = false, maskSecrets = true) {
+async function ensureSession(sessionId, cwd, isPM, wasExited = false, maskSecrets = true, agentTool = 'claude') {
   let entry = terminalCache.get(sessionId);
   let freshEntry = false;
   if (!entry) {
@@ -203,7 +203,7 @@ async function ensureSession(sessionId, cwd, isPM, wasExited = false, maskSecret
       if (isPM) {
         await station.createPmPty({ id: sessionId, cwd, maskSecrets });
       } else {
-        await station.createPty({ id: sessionId, cwd, runClaude: true, maskSecrets });
+        await station.createPty({ id: sessionId, cwd, runClaude: true, maskSecrets, agentTool });
       }
     }
     entry.started = true;
@@ -217,10 +217,11 @@ async function ensureSession(sessionId, cwd, isPM, wasExited = false, maskSecret
 
 async function restartSession(entry, session) {
   const maskSecrets = session.maskSecrets !== false;
+  const agentTool = session.agentTool || 'claude';
   if (session.isPM) {
     await station.createPmPty({ id: session.id, cwd: session.cwd, maskSecrets });
   } else {
-    await station.createPty({ id: session.id, cwd: session.cwd, runClaude: true, maskSecrets });
+    await station.createPty({ id: session.id, cwd: session.cwd, runClaude: true, maskSecrets, agentTool });
   }
   entry.exited = false;
   if (!entry.persistTimer) {
@@ -283,7 +284,7 @@ export default function TerminalPane({ session }) {
     let resizeDebounceTimer = null;
 
     (async () => {
-      const entry = await ensureSession(session.id, session.cwd, session.isPM, !!session.exitedAt, session.maskSecrets !== false);
+      const entry = await ensureSession(session.id, session.cwd, session.isPM, !!session.exitedAt, session.maskSecrets !== false, session.agentTool || 'claude');
       if (cancelled) return;
       entryRef.current = entry;
       setExited(!!entry.exited);

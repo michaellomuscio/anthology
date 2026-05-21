@@ -6,6 +6,7 @@ import MissionControl from './components/MissionControl.jsx';
 import SpawnModal from './components/SpawnModal.jsx';
 import CommandPalette from './components/CommandPalette.jsx';
 import SlashPalette from './components/SlashPalette.jsx';
+import RichInputModal from './components/RichInputModal.jsx';
 import Schedules from './components/Schedules.jsx';
 import OnboardingTour from './components/OnboardingTour.jsx';
 import HelpGuide from './components/HelpGuide.jsx';
@@ -36,6 +37,7 @@ export default function App() {
   const [showSpawn, setShowSpawn] = useState(false);
   const [showCmdK, setShowCmdK] = useState(false);
   const [showSlash, setShowSlash] = useState(false);
+  const [showRich, setShowRich] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   const [phoneClientCount, setPhoneClientCount] = useState(0);
@@ -249,8 +251,15 @@ export default function App() {
         if (activeIdRef.current) { e.preventDefault(); setShowSlash(true); }
         return;
       }
+      // Ctrl+G opens the Rich Input composer (mirrors Warp's bottom-toolbar
+      // Rich Input ^G). Cmd+G would conflict with Find Next on macOS, so we
+      // stick with raw Ctrl+G.
+      if (e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'g') {
+        if (activeIdRef.current) { e.preventDefault(); setShowRich(true); }
+        return;
+      }
       if (meta && e.key === '\\') { e.preventDefault(); setView(v => v === 'session' ? 'mission' : 'session'); return; }
-      if (e.key === 'Escape') { setShowSpawn(false); setShowCmdK(false); setShowSlash(false); return; }
+      if (e.key === 'Escape') { setShowSpawn(false); setShowCmdK(false); setShowSlash(false); setShowRich(false); return; }
 
       // Cmd+1..9 jumps to session N (works even while terminal is focused)
       if (meta && /^[1-9]$/.test(e.key)) {
@@ -282,7 +291,7 @@ export default function App() {
     setView('session');
   };
 
-  const handleSpawn = async ({ name, cwd, color, tag, pm }) => {
+  const handleSpawn = async ({ name, cwd, color, tag, pm, agentTool }) => {
     const id = uid();
     const session = {
       id,
@@ -292,6 +301,9 @@ export default function App() {
       tag: pm ? 'pm' : tag,
       pinned: !!pm,
       isPM: !!pm,
+      // Default 'claude' when unspecified — matches the pre-Codex behavior so
+      // existing sessions don't suddenly try to spawn a missing binary.
+      agentTool: pm ? 'claude' : (agentTool || 'claude'),
       createdAt: Date.now(),
     };
     setSessions((prev) => [...prev, session]);
@@ -454,6 +466,7 @@ export default function App() {
             onRename={handleRename}
             onToggleMaskSecrets={handleToggleMaskSecrets}
             onOpenSlashPalette={() => setShowSlash(true)}
+            onOpenRichInput={() => setShowRich(true)}
           />
         ) : view === 'schedules' ? (
           <Schedules onJump={handleSelect} />
@@ -488,6 +501,14 @@ export default function App() {
         <SlashPalette
           sessionId={activeId}
           onClose={() => setShowSlash(false)}
+        />
+      )}
+
+      {showRich && activeId && (
+        <RichInputModal
+          sessionId={activeId}
+          sessionName={active?.name}
+          onClose={() => setShowRich(false)}
         />
       )}
 

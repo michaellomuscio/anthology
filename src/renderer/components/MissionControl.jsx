@@ -17,12 +17,20 @@ function formatIdle(ms) {
 }
 
 function MCCard({ session, status, lastActivity, onSelect, alert }) {
+  const tool = !session.isPM && session.agentTool ? session.agentTool : null;
   return (
     <div className={`mc-card ${alert ? 'alert' : ''}`} onClick={onSelect}>
       <div className="mc-card-row1">
         <div className="session-color-tag" style={{ background: session.color, height: 16, width: 4 }} />
         <div className={`status-dot ${status}`} />
         <div className="mc-card-name" title={session.name}>{session.name}</div>
+        {session.isPM && <span className="pm-badge">PM</span>}
+        {tool && (
+          <span className={`agent-badge agent-badge--${tool === 'codex' ? 'codex' : 'claude'}`} title={tool === 'codex' ? 'OpenAI Codex' : 'Claude Code'}>
+            <span className="agent-badge-mark">{tool === 'codex' ? '⌬' : '✱'}</span>
+            {tool === 'codex' ? 'codex' : 'claude'}
+          </span>
+        )}
         <div className="mc-card-meta">{session.tag || ''}</div>
       </div>
       <div className="mc-card-task">
