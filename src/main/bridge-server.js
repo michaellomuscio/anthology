@@ -456,13 +456,17 @@ class BridgeServer {
       }
 
       case 'resize': {
+        // Intentional no-op. The Mac renderer is authoritative for PTY
+        // dimensions — it sets cols/rows via the IPC path based on its xterm
+        // grid. When iOS used to also resize, the PTY bounced between two
+        // sizes mid-render, mangling Claude's tables / box-drawing lines on
+        // both views. iOS now displays whatever the Mac sets; horizontal
+        // overflow handled by SwiftTerm. Session_meta carries cols/rows so
+        // the client can render at the authoritative size if it wants.
         const sid = safeId(msg.sessionId);
         if (!sid) return this._sendErr(client, id, 'bad_request', 'Invalid sessionId');
-        const cols = Math.max(2, Math.min(1000, Number(msg.cols) || 0));
-        const rows = Math.max(2, Math.min(1000, Number(msg.rows) || 0));
         if (!this.ptyManager.exists(sid)) return this._sendErr(client, id, 'not_found', 'session not found');
-        this.ptyManager.resize(sid, cols, rows);
-        return this._send(client, { type: 'ack', id, result: { ok: true } });
+        return this._send(client, { type: 'ack', id, result: { ok: true, applied: false, reason: 'mac_authoritative' } });
       }
 
       case 'spawn': {
@@ -637,6 +641,11 @@ class BridgeServer {
   _toMeta(session) {
     if (!session) return null;
     const status = this.ptyManager.getStatus(session.id);
+    // Pull the PTY's actual cols/rows so clients render at the authoritative
+    // width (the Mac sets these; iOS reads them).
+    const dims = this.ptyManager.getDimensions
+      ? this.ptyManager.getDimensions(session.id)
+      : null;
     return {
       id: session.id,
       name: session.name || 'session',
@@ -653,6 +662,9 @@ class BridgeServer {
       agentTool: session.agentTool || null,
       personaName: session.personaName || null,
       groupId: session.groupId || null,
+      // v0.8+: authoritative PTY dimensions so the client knows the rendered width.
+      cols: dims?.cols || null,
+      rows: dims?.rows || null,
     };
   }
 

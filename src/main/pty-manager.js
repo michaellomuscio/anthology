@@ -321,6 +321,15 @@ class PtyManager {
     return entry ? entry.recentBuffer : null;
   }
 
+  /// Current PTY dimensions — read straight from node-pty's IPty handle.
+  /// Used by the bridge to surface the authoritative size to remote clients
+  /// so they know what width the output was formatted for.
+  getDimensions(id) {
+    const entry = this.sessions.get(id);
+    if (!entry || !entry.proc) return null;
+    return { cols: entry.proc.cols || 0, rows: entry.proc.rows || 0 };
+  }
+
   getIdleMs(id) {
     const entry = this.sessions.get(id);
     return entry ? Date.now() - entry.lastDataAt : null;
