@@ -13,6 +13,8 @@ try {
   throw err;
 }
 
+const SecretScrubber = require('./secret-scrubber');
+
 // Electron launched from Finder/dock starts with a stripped LaunchServices env —
 // missing PATH entries, exports, and shell-init side-effects (mise/direnv/asdf/etc).
 // Spawn the user's interactive login shell once and capture its env so spawned ptys
@@ -129,7 +131,7 @@ class PtyManager {
     this.statusTimer = setInterval(() => this.tickStatuses(), STATUS_TICK_MS);
   }
 
-  create({ id, cwd, cols = 100, rows = 30, command = null, runClaude = true }) {
+  create({ id, cwd, cols = 100, rows = 30, command = null, runClaude = true, maskSecrets = true }) {
     if (this.sessions.has(id)) {
       // Already exists — return current snapshot
       return { id, alive: true };
@@ -168,13 +170,21 @@ class PtyManager {
       status: 'running',
       recentBuffer: '',
       cwd: workingDir,
+      maskSecrets: !!maskSecrets,
     };
+    // Secret scrubber sits in front of every emission so credentials in the
+    // PTY stream are replaced before they reach recentBuffer, the renderer,
+    // or the iOS bridge. When disabled it's a passthrough.
+    entry.scrubber = new SecretScrubber({
+      enabled: entry.maskSecrets,
+      onRedaction: (_hits, total) => {
+        this.sendToRenderer('pty:redaction', { id, total });
+      },
+    });
     this.sessions.set(id, entry);
 
-    proc.onData((data) => {
-      entry.lastDataAt = Date.now();
-      // Keep a generous tail of recent output for the PM to read back via MCP.
-      entry.recentBuffer = (entry.recentBuffer + data).slice(-30000);
+    const emit = (out) => {
+      entry.recentBuffer = (entry.recentBuffer + out).slice(-30000);
       entry.bufferDirty = true;
       const newStatus = this.deriveStatus(entry);
       if (newStatus !== entry.status) {
@@ -184,10 +194,20 @@ class PtyManager {
       // No "running" re-broadcast on every chunk — under heavy claude output
       // that doubled IPC volume and forced a full <App> re-render on each chunk.
       // The per-tick deriveStatus pass below handles transitions back to running.
-      this.sendToRenderer('pty:data', { id, data });
+      this.sendToRenderer('pty:data', { id, data: out });
+    };
+
+    proc.onData((data) => {
+      entry.lastDataAt = Date.now();
+      entry.scrubber.feed(data, emit);
     });
 
     proc.onExit(({ exitCode, signal }) => {
+      // Drain anything still held in the scrubber's tail before we close it,
+      // so the user sees the last few bytes of output even if the process exited
+      // mid-token.
+      try { entry.scrubber.flush(emit); } catch (_) {}
+      try { entry.scrubber.close(); } catch (_) {}
       this.sessions.delete(id);
       this.sendToRenderer('pty:exit', { id, exitCode, signal });
     });
@@ -250,6 +270,40 @@ class PtyManager {
 
   exists(id) {
     return this.sessions.has(id);
+  }
+
+  // Toggle secret masking for a live session. When switching from on→off the
+  // scrubber's held tail is flushed RAW (the user just opted out) so the user
+  // doesn't see masked content from the last ~256 bytes lingering.
+  setMaskSecrets(id, enabled) {
+    const entry = this.sessions.get(id);
+    if (!entry) return false;
+    const want = !!enabled;
+    if (entry.maskSecrets === want) return true;
+    if (!want) {
+      // Drain any held tail un-masked since the user just opted out.
+      const tail = entry.scrubber.setEnabled(false);
+      if (tail) {
+        entry.recentBuffer = (entry.recentBuffer + tail).slice(-30000);
+        entry.bufferDirty = true;
+        this.sendToRenderer('pty:data', { id, data: tail });
+      }
+    } else {
+      entry.scrubber.setEnabled(true);
+    }
+    entry.maskSecrets = want;
+    this.sendToRenderer('pty:mask-state', { id, maskSecrets: want });
+    return true;
+  }
+
+  getMaskSecrets(id) {
+    const entry = this.sessions.get(id);
+    return entry ? !!entry.maskSecrets : null;
+  }
+
+  getRedactionCount(id) {
+    const entry = this.sessions.get(id);
+    return entry?.scrubber ? entry.scrubber.getRedactionCount() : 0;
   }
 
   getStatus(id) {

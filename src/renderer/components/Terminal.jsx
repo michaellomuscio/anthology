@@ -142,7 +142,7 @@ function installFlushHandler() {
 }
 installFlushHandler();
 
-async function ensureSession(sessionId, cwd, isPM, wasExited = false) {
+async function ensureSession(sessionId, cwd, isPM, wasExited = false, maskSecrets = true) {
   let entry = terminalCache.get(sessionId);
   let freshEntry = false;
   if (!entry) {
@@ -201,9 +201,9 @@ async function ensureSession(sessionId, cwd, isPM, wasExited = false) {
     // navigating away and back would silently spawn a fresh claude.
     if (!exists && !entry.exited) {
       if (isPM) {
-        await station.createPmPty({ id: sessionId, cwd });
+        await station.createPmPty({ id: sessionId, cwd, maskSecrets });
       } else {
-        await station.createPty({ id: sessionId, cwd, runClaude: true });
+        await station.createPty({ id: sessionId, cwd, runClaude: true, maskSecrets });
       }
     }
     entry.started = true;
@@ -216,10 +216,11 @@ async function ensureSession(sessionId, cwd, isPM, wasExited = false) {
 }
 
 async function restartSession(entry, session) {
+  const maskSecrets = session.maskSecrets !== false;
   if (session.isPM) {
-    await station.createPmPty({ id: session.id, cwd: session.cwd });
+    await station.createPmPty({ id: session.id, cwd: session.cwd, maskSecrets });
   } else {
-    await station.createPty({ id: session.id, cwd: session.cwd, runClaude: true });
+    await station.createPty({ id: session.id, cwd: session.cwd, runClaude: true, maskSecrets });
   }
   entry.exited = false;
   if (!entry.persistTimer) {
@@ -282,7 +283,7 @@ export default function TerminalPane({ session }) {
     let resizeDebounceTimer = null;
 
     (async () => {
-      const entry = await ensureSession(session.id, session.cwd, session.isPM, !!session.exitedAt);
+      const entry = await ensureSession(session.id, session.cwd, session.isPM, !!session.exitedAt, session.maskSecrets !== false);
       if (cancelled) return;
       entryRef.current = entry;
       setExited(!!entry.exited);

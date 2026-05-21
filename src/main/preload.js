@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('station', {
   resizePty: (id, cols, rows) => ipcRenderer.invoke('pty:resize', { id, cols, rows }),
   killPty: (id) => ipcRenderer.invoke('pty:kill', id),
   ptyExists: (id) => ipcRenderer.invoke('pty:exists', id),
+  setMaskSecrets: (id, enabled) => ipcRenderer.invoke('pty:set-mask-secrets', { id, enabled }),
+  getMaskState: (id) => ipcRenderer.invoke('pty:get-mask-state', id),
   mcpInfo: () => ipcRenderer.invoke('mcp:info'),
 
   // Per-session scrollback persistence
@@ -54,6 +56,16 @@ contextBridge.exposeInMainWorld('station', {
     const listener = (_e, payload) => cb(payload);
     ipcRenderer.on('pty:status', listener);
     return () => ipcRenderer.removeListener('pty:status', listener);
+  },
+  onPtyRedaction: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    ipcRenderer.on('pty:redaction', listener);
+    return () => ipcRenderer.removeListener('pty:redaction', listener);
+  },
+  onMaskState: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    ipcRenderer.on('pty:mask-state', listener);
+    return () => ipcRenderer.removeListener('pty:mask-state', listener);
   },
   onSessionCreated: (cb) => {
     const listener = (_e, payload) => cb(payload);
@@ -99,7 +111,7 @@ contextBridge.exposeInMainWorld('station', {
   // Bridge (phone companion)
   bridgeInfo: () => ipcRenderer.invoke('bridge:info'),
   bridgeNetworkInfo: () => ipcRenderer.invoke('bridge:network-info'),
-  bridgePairStart: () => ipcRenderer.invoke('bridge:pair-start'),
+  bridgePairStart: (opts) => ipcRenderer.invoke('bridge:pair-start', opts || {}),
   bridgePairCancel: () => ipcRenderer.invoke('bridge:pair-cancel'),
   bridgeTokensList: () => ipcRenderer.invoke('bridge:tokens-list'),
   bridgeTokenRevoke: (tokenId) => ipcRenderer.invoke('bridge:token-revoke', tokenId),
@@ -109,5 +121,16 @@ contextBridge.exposeInMainWorld('station', {
     const listener = (_e, payload) => cb(payload);
     ipcRenderer.on('bridge:clients', listener);
     return () => ipcRenderer.removeListener('bridge:clients', listener);
+  },
+
+  // Cloudflare Tunnel — public URL for the bridge so iOS can connect through
+  // any firewall. Quick-tunnel v1: URL is ephemeral (changes per restart).
+  tunnelStatus: () => ipcRenderer.invoke('tunnel:status'),
+  tunnelStart: () => ipcRenderer.invoke('tunnel:start'),
+  tunnelStop: () => ipcRenderer.invoke('tunnel:stop'),
+  onTunnelStatus: (cb) => {
+    const listener = (_e, payload) => cb(payload);
+    ipcRenderer.on('tunnel:status', listener);
+    return () => ipcRenderer.removeListener('tunnel:status', listener);
   },
 });

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import TerminalPane from './Terminal.jsx';
 import { STATUS_LABELS } from '../constants.js';
 import { insertPathsIntoSession } from '../files.js';
@@ -45,6 +45,49 @@ function PaperclipIcon() {
   );
 }
 
+function ShieldIcon({ filled }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2 4 5v7c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V5l-8-3Z" />
+    </svg>
+  );
+}
+
+function SlashIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 4 8 20" />
+    </svg>
+  );
+}
+
+function BoltIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2 3 14h8l-2 8 10-12h-8l2-8z" />
+    </svg>
+  );
+}
+
+function GaugeIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 14 8 10" />
+      <circle cx="12" cy="14" r="9" />
+      <path d="M12 5v2M5 14h2M19 14h2M7.5 9.5l1.4 1.4M16.5 9.5l-1.4 1.4" />
+    </svg>
+  );
+}
+
+// Send a slash command to a session as if the user typed it. `withArgs: true`
+// leaves the line unterminated so the user can finish the value live (used for
+// /effort, /model). `withArgs: false` sends \r so claude executes immediately.
+function sendSlash(sessionId, cmd, { withArgs = false } = {}) {
+  if (!sessionId || !cmd) return;
+  const text = withArgs ? `/${cmd} ` : `/${cmd}\r`;
+  try { station.writePty(sessionId, text); } catch (_) {}
+}
+
 function formatIdle(ms) {
   if (!ms) return '—';
   const sec = Math.floor((Date.now() - ms) / 1000);
@@ -54,7 +97,10 @@ function formatIdle(ms) {
   return Math.floor(sec / 3600) + 'h';
 }
 
-export default function SessionView({ session, status, lastActivity, onKill, onPin, onRename }) {
+export default function SessionView({ session, status, lastActivity, redactionCount = 0, onKill, onPin, onRename, onToggleMaskSecrets, onOpenSlashPalette }) {
+  const maskOn = session.maskSecrets !== false;
+  const [effortMenuOpen, setEffortMenuOpen] = useState(false);
+  const effortLevels = ['low', 'medium', 'high', 'max'];
   const repoLabel = useMemo(() => {
     if (!session.cwd) return '';
     const parts = session.cwd.split('/').filter(Boolean);
@@ -74,6 +120,19 @@ export default function SessionView({ session, status, lastActivity, onKill, onP
               {STATUS_LABELS[status] || status}
             </div>
             <div className="session-header-actions">
+              <button
+                className={`btn btn-ghost mask-toggle ${maskOn ? 'active' : ''}`}
+                title={maskOn
+                  ? `Secret masking ON · ${redactionCount} redacted so far. Click to disable.`
+                  : 'Secret masking OFF. Click to enable.'}
+                onClick={() => onToggleMaskSecrets?.(session.id)}
+              >
+                <ShieldIcon filled={maskOn} />
+                {maskOn ? 'Masked' : 'Mask off'}
+                {maskOn && redactionCount > 0 && (
+                  <span className="mask-count">{redactionCount > 99 ? '99+' : redactionCount}</span>
+                )}
+              </button>
               <button
                 className="btn btn-ghost"
                 title="Attach files (or drag onto the terminal)"
@@ -126,6 +185,81 @@ export default function SessionView({ session, status, lastActivity, onKill, onP
               {session.tag && <div className="tag">{session.tag}</div>}
               <div className="tag">{repoLabel}</div>
             </div>
+          </div>
+
+          {/* Claude-Code quick-action toolbar. Buttons write slash commands
+              into the PTY as if the user typed them — same effect as typing
+              "/effort high" in claude, just one click. */}
+          <div className="claude-quickbar">
+            <button
+              type="button"
+              className="qb-btn"
+              title="Slash commands (⌘/)"
+              onClick={() => onOpenSlashPalette?.()}
+            >
+              <SlashIcon />
+              <span>Commands</span>
+              <span className="kbd-pill">⌘/</span>
+            </button>
+
+            <div className="qb-group" tabIndex={0} onBlur={() => setEffortMenuOpen(false)}>
+              <button
+                type="button"
+                className="qb-btn"
+                title="Set Claude's effort level"
+                onClick={() => setEffortMenuOpen((v) => !v)}
+              >
+                <GaugeIcon />
+                <span>Effort</span>
+                <span className="qb-caret">▾</span>
+              </button>
+              {effortMenuOpen && (
+                <div className="qb-menu">
+                  {effortLevels.map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      className="qb-menu-item"
+                      onClick={() => {
+                        sendSlash(session.id, `effort ${lvl}`);
+                        setEffortMenuOpen(false);
+                      }}
+                    >
+                      <span className="qb-menu-name">{lvl}</span>
+                      <span className="qb-menu-hint">/effort {lvl}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              className="qb-btn"
+              title="Toggle Fast mode (Opus 4.6)"
+              onClick={() => sendSlash(session.id, 'fast')}
+            >
+              <BoltIcon />
+              <span>Fast</span>
+            </button>
+
+            <button
+              type="button"
+              className="qb-btn"
+              title="Switch model"
+              onClick={() => sendSlash(session.id, 'model', { withArgs: true })}
+            >
+              <span>Model…</span>
+            </button>
+
+            <button
+              type="button"
+              className="qb-btn"
+              title="Clear conversation context"
+              onClick={() => sendSlash(session.id, 'clear')}
+            >
+              <span>Clear</span>
+            </button>
           </div>
         </div>
 
