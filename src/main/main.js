@@ -197,6 +197,37 @@ function createWindow() {
   });
 }
 
+// PM session creation, extracted so both the renderer's pty:create-pm IPC AND
+// the bridge server (for iOS spawn-as-PM) can use the same path. Writes a
+// per-session mcp-config JSON pointing claude at our local MCP HTTP server,
+// then spawns claude with --mcp-config.
+function createPmSession({ id, cwd, cols, rows, maskSecrets = true }) {
+  if (!mcpInfo) throw new Error('MCP server is not running');
+  const configDir = path.join(app.getPath('userData'), 'mcp-configs');
+  fs.mkdirSync(configDir, { recursive: true });
+  const configPath = path.join(configDir, `pm-${id}.json`);
+  const config = {
+    mcpServers: {
+      station: {
+        type: 'http',
+        url: `http://127.0.0.1:${mcpInfo.port}/mcp`,
+        headers: { Authorization: `Bearer ${mcpInfo.token}` },
+      },
+    },
+  };
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  // Escape the path for shell — userData typically lives under
+  // ~/Library/Application Support/anthology, whose parent contains a space.
+  const safeConfigPath = configPath.replace(/(["\\$`])/g, '\\$1');
+  const command = `exec claude --mcp-config "${safeConfigPath}"\r`;
+  return ptyManager.create({
+    id, cwd, cols, rows,
+    runClaude: true,
+    command,
+    maskSecrets,
+  });
+}
+
 app.whenReady().then(async () => {
   // Dev-mode dock icon: in production, electron-builder bakes build/icon.icns
   // into the .app bundle, but `npm run dev` runs raw electron with its
@@ -296,6 +327,16 @@ app.whenReady().then(async () => {
     appVersion: app.getVersion(),
     serverName: os.hostname().replace(/\.local$/, ''),
     auditPath: path.join(app.getPath('userData'), 'bridge-audit.log'),
+    // Wired so the bridge can spawn workers + PMs + manage groups without
+    // duplicating MCP-config or WorkerStore logic.
+    workerStore,
+    groupsStore,
+    createPmSession,
+    submitPromptDelayed: (id, text, delayMs) => {
+      setTimeout(() => {
+        try { ptyManager.submitPrompt(id, text); } catch (_) {}
+      }, delayMs);
+    },
     onClientChange: (count) => {
       sendToRendererOnly('bridge:clients', { count });
       if (count > 0 && powerSaveBlockerId === null) {
@@ -618,37 +659,13 @@ function registerIpcHandlers() {
 
   // -------------------- PM session creation (claude with MCP tools) --------------------
   ipcMain.handle('pty:create-pm', (_e, opts) => {
-    if (!mcpInfo) {
-      throw new Error('MCP server is not running');
-    }
-    const id = safeId(opts?.id);
-    if (!id) throw new Error('Invalid session id');
-    const configDir = path.join(app.getPath('userData'), 'mcp-configs');
-    fs.mkdirSync(configDir, { recursive: true });
-    const configPath = path.join(configDir, `pm-${id}.json`);
-    const config = {
-      mcpServers: {
-        station: {
-          type: 'http',
-          url: `http://127.0.0.1:${mcpInfo.port}/mcp`,
-          headers: { Authorization: `Bearer ${mcpInfo.token}` },
-        },
-      },
-    };
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-    // Escape the path for shell — userData typically lives under
-    // ~/Library/Application Support/anthology, whose parent contains a space.
-    const safeConfigPath = configPath.replace(/(["\\$`])/g, '\\$1');
-    const command = `exec claude --mcp-config "${safeConfigPath}"\r`;
-
-    return ptyManager.create({
-      id,
+    const sid = safeId(opts?.id);
+    if (!sid) throw new Error('Invalid session id');
+    return createPmSession({
+      id: sid,
       cwd: opts.cwd,
       cols: opts.cols,
       rows: opts.rows,
-      runClaude: true,
-      command,
       maskSecrets: opts?.maskSecrets !== false,
     });
   });

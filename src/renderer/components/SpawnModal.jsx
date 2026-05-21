@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { SESSION_COLORS, TAGS } from '../constants.js';
+import { SESSION_COLORS } from '../constants.js';
 
 const station = window.station;
 
 function stripWorkerPrefix(name) { return (name || '').replace(/^worker-/, ''); }
 
-export default function SpawnModal({ onClose, onSpawn }) {
+export default function SpawnModal({ onClose, onSpawn, recentTags = [] }) {
   const [name, setName] = useState('');
   const [cwd, setCwd] = useState('');
   const [color, setColor] = useState(SESSION_COLORS[0]);
-  const [tag, setTag] = useState(TAGS[0]);
+  // Free-text. Empty by default — tag is now optional and unconstrained.
+  const [tag, setTag] = useState('');
   const [recents, setRecents] = useState([]);
   const [pmMode, setPmMode] = useState(false);
   // 'claude' is the default. 'codex' execs the OpenAI Codex CLI instead
@@ -183,25 +184,41 @@ export default function SpawnModal({ onClose, onSpawn }) {
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-            <div className="field">
-              <div className="field-label">Tag</div>
-              <select value={tag} onChange={(e) => setTag(e.target.value)}>
-                {TAGS.map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-            <div className="field">
-              <div className="field-label">Color</div>
-              <div className="color-picker">
-                {SESSION_COLORS.map((c) => (
-                  <div
-                    key={c}
-                    className={`color-swatch ${c === color ? 'selected' : ''}`}
-                    style={{ background: c }}
-                    onClick={() => setColor(c)}
-                  />
+          <div className="field">
+            <div className="field-label">Tag <span className="field-label-hint">(any label — cds-emails, marketing, research, …)</span></div>
+            <input
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
+              placeholder="optional"
+            />
+            {recentTags.length > 0 && (
+              <div className="tag-chips">
+                {recentTags.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    className={`tag-chip ${t === tag ? 'active' : ''}`}
+                    onClick={() => setTag(t === tag ? '' : t)}
+                    title={t === tag ? 'Click to clear' : 'Use this tag'}
+                  >
+                    {t}
+                  </button>
                 ))}
               </div>
+            )}
+          </div>
+
+          <div className="field">
+            <div className="field-label">Color</div>
+            <div className="color-picker">
+              {SESSION_COLORS.map((c) => (
+                <div
+                  key={c}
+                  className={`color-swatch ${c === color ? 'selected' : ''}`}
+                  style={{ background: c }}
+                  onClick={() => setColor(c)}
+                />
+              ))}
             </div>
           </div>
         </div>

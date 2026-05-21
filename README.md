@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/platform-macOS%2014%2B-1d1d1f?logo=apple&logoColor=white" alt="macOS 14+">
   <img src="https://img.shields.io/badge/arch-Apple%20Silicon-A96BDB" alt="Apple Silicon">
-  <img src="https://img.shields.io/badge/version-0.7.0-2ea44f" alt="v0.7.0">
+  <img src="https://img.shields.io/badge/version-0.8.0-2ea44f" alt="v0.8.0">
   <img src="https://img.shields.io/badge/signed-Developer%20ID-blue?logo=apple&logoColor=white" alt="Signed">
   <img src="https://img.shields.io/badge/notarized-yes-success" alt="Notarized">
   <img src="https://img.shields.io/badge/iOS%20companion-yes-A96BDB?logo=apple&logoColor=white" alt="iOS companion app">
@@ -38,8 +38,8 @@ Claude Code is excellent at deep, focused work in a single repo. The moment you 
 ## Download
 
 <p>
-  <a href="https://github.com/michaellomuscio/anthology/releases/download/v0.7.0/Anthology-0.7.0-arm64.dmg">
-    <strong>⬇ Download Anthology 0.7.0 for Apple Silicon</strong>
+  <a href="https://github.com/michaellomuscio/anthology/releases/download/v0.8.0/Anthology-0.8.0-arm64.dmg">
+    <strong>⬇ Download Anthology 0.8.0 for Apple Silicon</strong>
   </a>
   &nbsp;·&nbsp;
   <a href="https://github.com/michaellomuscio/anthology/releases/latest">All releases</a>
